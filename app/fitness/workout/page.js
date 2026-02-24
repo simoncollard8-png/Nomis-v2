@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Nav from '../../../components/Nav'
 import NomisChat from '../../../components/NomisChat'
-import { getTodaysWorkout, startWorkout, saveSets, checkAndSavePR, dbRead, dbWrite, chat } from '../../../lib/api'
+import { getTodaysWorkout, startWorkout, saveSets, checkAndSavePR, dbRead, dbWrite, getExerciseInfo, getSwapOptions } from '../../../lib/api'
 
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
 const WORKOUT_TYPES = ['Push','Pull','Legs','Upper','Lower','Full Body','Rest','Cardio']
@@ -134,30 +134,26 @@ function BodyModel({ activeMuscle }) {
 
 // ── Exercise Info Dropdown ──────────────────────────────────────────────────
 function ExerciseInfo({ exercise }) {
-  const [open, setOpen]     = useState(false)
-  const [info, setInfo]     = useState(null)
+  const [open, setOpen]       = useState(false)
+  const [info, setInfo]       = useState(null)
   const [loading, setLoading] = useState(false)
+  const [lastEx, setLastEx]   = useState(null)
+
+  useEffect(() => {
+    if (lastEx !== exercise.id) {
+      setOpen(false)
+      setInfo(null)
+      setLastEx(exercise.id)
+    }
+  }, [exercise.id])
 
   async function load() {
-    if (info) { setOpen(o => !o); return }
+    if (open) { setOpen(false); return }
     setOpen(true)
+    if (info) return
     setLoading(true)
-    try {
-      const prompt = `Give me a concise exercise breakdown for "${exercise.name}" in this exact JSON format (no markdown):
-{
-  "muscles": "primary muscles worked",
-  "secondary": "secondary muscles",
-  "cues": ["cue 1", "cue 2", "cue 3"],
-  "mistakes": ["mistake 1", "mistake 2"],
-  "variations": ["variation 1", "variation 2", "variation 3"],
-  "tip": "one key coaching tip"
-}`
-      const res = await chat(prompt, [])
-      if (res.response) {
-        const cleaned = res.response.replace(/```json|```/g,'').trim()
-        setInfo(JSON.parse(cleaned))
-      }
-    } catch { setInfo({ muscles: exercise.muscle_group, secondary: '—', cues: ['Focus on form'], mistakes: ['Ego lifting'], variations: [], tip: 'Control the movement.' }) }
+    const result = await getExerciseInfo(exercise.name)
+    setInfo(result)
     setLoading(false)
   }
 
@@ -212,23 +208,20 @@ function SwapModal({ exercises, onClose, onSwap }) {
   async function getSuggestions() {
     if (!selected.length) return
     setLoading(true)
-    const toSwap = exercises.filter(e => selected.includes(e.id))
-    const prompt = `I want to swap these exercises: ${toSwap.map(e => e.name).join(', ')}.
-Muscle groups: ${[...new Set(toSwap.map(e => e.muscle_group))].join(', ')}.
-Give me 3 alternative exercises for each in this exact JSON format (no markdown):
-{
-  "swaps": [
-    {
-      "original": "exercise name",
-      "options": ["alt 1", "alt 2", "alt 3"]
-    }
-  ]
-}`
     try {
-      const res = await chat(prompt, [])
-      const cleaned = res.response.replace(/```json|```/g,'').trim()
-      setSuggestions(JSON.parse(cleaned))
-    } catch { setSuggestions(null) }
+      // Get swap options for each selected exercise in parallel
+      const toSwap = exercises.filter(e => selected.includes(e.id))
+      const results = await Promise.all(
+        toSwap.map(ex => getSwapOptions(ex.name, `Target muscle: ${ex.muscle_group}`))
+      )
+      const swaps = toSwap.map((ex, i) => ({
+        original: ex.name,
+        options: results[i].map(r => ({ name: r.name, equipment: r.equipment, difficulty: r.difficulty, similarity: r.similarity }))
+      }))
+      setSuggestions({ swaps })
+    } catch (e) {
+      console.error('Swap error:', e)
+    }
     setLoading(false)
   }
 
@@ -272,19 +265,24 @@ Give me 3 alternative exercises for each in this exact JSON format (no markdown)
                 <div key={i} style={sw.swapGroup}>
                   <div style={sw.swapOriginal}>Replacing: <span style={{ color:'var(--text2)' }}>{swap.original}</span></div>
                   <div style={sw.options}>
-                    {swap.options?.map((opt, j) => (
-                      <button
-                        key={j}
-                        style={{ ...sw.optBtn, ...(replacing === `${i}-${j}` ? sw.optBtnActive : {}) }}
-                        onClick={() => {
-                          setReplacing(`${i}-${j}`)
-                          onSwap(swap.original, opt)
-                        }}
-                      >
-                        {opt}
-                        {replacing === `${i}-${j}` && <span style={sw.optCheck}> ✓</span>}
-                      </button>
-                    ))}
+                    {swap.options?.map((opt, j) => {
+                      const name = typeof opt === 'string' ? opt : opt.name
+                      const sub  = typeof opt === 'object' ? `${opt.equipment || ''} · ${opt.difficulty || ''}`.trim().replace(/^·\s*|·\s*$/, '') : ''
+                      return (
+                        <button
+                          key={j}
+                          style={{ ...sw.optBtn, ...(replacing === `${i}-${j}` ? sw.optBtnActive : {}) }}
+                          onClick={() => {
+                            setReplacing(`${i}-${j}`)
+                            onSwap(swap.original, name)
+                          }}
+                        >
+                          <span>{name}</span>
+                          {sub && <span style={{ fontSize:'0.44rem', color:'var(--text3)', display:'block', marginTop:'2px' }}>{sub}</span>}
+                          {replacing === `${i}-${j}` && <span style={sw.optCheck}> ✓</span>}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               ))}
