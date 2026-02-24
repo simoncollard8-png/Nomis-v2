@@ -1,36 +1,35 @@
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
 
 :root {
-  --bg:         #060910;
-  --bg2:        #090d16;
-  --bg3:        #0c111e;
-  --bg4:        #0f1525;
-  --border:     rgba(255,255,255,0.05);
-  --border2:    rgba(255,255,255,0.08);
-  --text:       #e2e8f5;
-  --text2:      #8892a4;
-  --text3:      #3d4459;
-  --text4:      #1e2235;
-  --green:      #22d48a;
-  --green-dim:  rgba(34,212,138,0.12);
-  --green-glow: rgba(34,212,138,0.25);
-  --cyan:       #00e5ff;
-  --cyan-dim:   rgba(0,229,255,0.1);
+  --bg:           #060910;
+  --bg2:          #090d16;
+  --bg3:          #0c111e;
+  --bg4:          #0f1525;
+  --border:       rgba(255,255,255,0.05);
+  --border2:      rgba(255,255,255,0.09);
+  --text:         #e2e8f5;
+  --text2:        #8892a4;
+  --text3:        #3d4459;
+  --text4:        #1e2235;
+  --green:        #22d48a;
+  --green-dim:    rgba(34,212,138,0.1);
+  --green-glow:   rgba(34,212,138,0.25);
+  --cyan:         #00e5ff;
+  --cyan-dim:     rgba(0,229,255,0.08);
+  --purple:       #a78bfa;
+  --orange:       #f59e0b;
+  --red:          #ef4444;
   --font-display: 'Rajdhani', sans-serif;
   --font-mono:    'JetBrains Mono', monospace;
+  --nav-w:        220px;
+  --nav-h:        64px;
+  --radius:       14px;
+  --radius-sm:    8px;
 }
 
-*, *::before, *::after {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-html {
-  height: 100%;
-  font-size: 16px;
-  -webkit-text-size-adjust: 100%;
-}
+html { height: 100%; font-size: 16px; -webkit-text-size-adjust: 100%; }
 
 body {
   min-height: 100%;
@@ -39,181 +38,214 @@ body {
   color: var(--text);
   font-family: var(--font-display);
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-input, button {
-  font-family: inherit;
-}
+a { color: inherit; text-decoration: none; }
+input, button, textarea, select { font-family: inherit; }
 
 input[type=number]::-webkit-inner-spin-button,
-input[type=number]::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
-input:focus {
-  border-color: var(--green) !important;
+input:focus, textarea:focus, select:focus {
+  border-color: rgba(34,212,138,0.4) !important;
   outline: none;
-  box-shadow: 0 0 0 1px rgba(34,212,138,0.15);
+  box-shadow: 0 0 0 1px rgba(34,212,138,0.1);
 }
 
-::selection {
-  background: rgba(34,212,138,0.2);
-  color: #fff;
-}
+::selection { background: rgba(34,212,138,0.2); color: #fff; }
 
-::-webkit-scrollbar {
-  width: 3px;
-  height: 3px;
-}
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(34,212,138,0.2); border-radius: 2px; }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(34,212,138,0.2);
-  border-radius: 2px;
-}
-
-/* ── Animations ─────────────────────────────── */
-
+/* ── Animations ── */
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(16px); }
+  from { opacity: 0; transform: translateY(14px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes fadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
-
 @keyframes pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34,212,138,0.4); }
-  50%       { opacity: 0.7; box-shadow: 0 0 0 4px rgba(34,212,138,0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34,212,138,0.5); }
+  50%       { box-shadow: 0 0 0 5px rgba(34,212,138,0); }
 }
-
 @keyframes orbPulse {
-  0%, 100% { box-shadow: 0 0 20px rgba(34,212,138,0.4), 0 0 40px rgba(34,212,138,0.1); }
-  50%       { box-shadow: 0 0 30px rgba(34,212,138,0.6), 0 0 60px rgba(34,212,138,0.2); }
+  0%, 100% { box-shadow: 0 0 16px rgba(34,212,138,0.4), 0 0 32px rgba(34,212,138,0.1); }
+  50%       { box-shadow: 0 0 24px rgba(34,212,138,0.65), 0 0 48px rgba(34,212,138,0.2); }
 }
-
-@keyframes scanline {
-  0%   { transform: translateY(-100%); }
-  100% { transform: translateY(100vh); }
-}
-
 @keyframes shimmer {
   0%   { background-position: -200% center; }
-  100% { background-position: 200% center; }
+  100% { background-position:  200% center; }
+}
+@keyframes typingBounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.3; }
+  40%           { transform: translateY(-4px); opacity: 1; }
+}
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes scanline {
+  from { transform: translateY(-100%); }
+  to   { transform: translateY(100vh); }
 }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+/* ── Utility ── */
+.animate-fadeUp  { animation: fadeUp 0.45s ease both; }
+.animate-fadeIn  { animation: fadeIn 0.3s ease both; }
+.animate-orb     { animation: orbPulse 3s ease-in-out infinite; }
+.animate-pulse   { animation: pulse 2.5s ease-in-out infinite; }
+
+/* ── Card hover ── */
+.nomis-card { animation: fadeUp 0.4s ease both; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
+.nomis-card:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(34,212,138,0.07); border-color: rgba(34,212,138,0.35) !important; }
+
+/* ── Interactive ── */
+.ex-row { transition: all 0.15s ease; }
+.ex-row:hover { background: rgba(255,255,255,0.02) !important; padding-left: 10px !important; }
+.btn-primary:hover  { background: rgba(34,212,138,0.18) !important; border-color: rgba(34,212,138,0.45) !important; }
+.btn-primary:active { transform: scale(0.98); }
+.nav-item:hover     { background: rgba(255,255,255,0.03) !important; color: var(--text) !important; }
+.nav-item.active    { background: var(--green-dim) !important; color: var(--green) !important; border-left: 2px solid var(--green) !important; }
+
+/* ── Typing indicator ── */
+.typing-dot { display: inline-block; animation: typingBounce 1.2s infinite; margin: 0 1px; font-size: 0.45rem; color: var(--green); }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* ── Layout ── */
+.app-shell {
+  display: flex;
+  min-height: 100dvh;
 }
 
-@keyframes borderGlow {
-  0%, 100% { border-color: rgba(34,212,138,0.2); }
-  50%       { border-color: rgba(34,212,138,0.5); }
+.main-content {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: calc(var(--nav-h) + 16px);
 }
 
-/* ── Utility classes ─────────────────────────── */
-
-.animate-fadeUp {
-  animation: fadeUp 0.5s ease both;
-}
-
-.animate-pulse-dot {
-  animation: pulse 2.5s ease-in-out infinite;
-}
-
-.animate-orb {
-  animation: orbPulse 3s ease-in-out infinite;
-}
-
-/* ── Card hover effects ──────────────────────── */
-
-.nomis-card {
-  animation: fadeUp 0.4s ease both;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-}
-
-.nomis-card-active:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 32px rgba(34,212,138,0.08);
-  border-color: rgba(34,212,138,0.4) !important;
-}
-
-/* ── Exercise row hover ──────────────────────── */
-
-.ex-row {
-  transition: all 0.15s ease;
-}
-
-.ex-row:hover {
-  background: rgba(255,255,255,0.02) !important;
-  padding-left: 10px !important;
-}
-
-/* ── Button hover effects ────────────────────── */
-
-.btn-complete:hover {
-  background: rgba(34,212,138,0.18) !important;
-  border-color: rgba(34,212,138,0.4) !important;
-}
-
-.btn-complete:active {
-  transform: scale(0.98);
-}
-
-.btn-chat-send:hover {
-  background: rgba(34,212,138,0.2) !important;
-}
-
-.orb-btn:hover {
-  box-shadow: 0 0 24px rgba(34,212,138,0.6), 0 0 48px rgba(34,212,138,0.2) !important;
-}
-
-/* ── Set input focus ─────────────────────────── */
-.set-input:focus {
-  border-color: rgba(34,212,138,0.4) !important;
-  background: rgba(34,212,138,0.03) !important;
-}
-
-/* ── Mobile / PWA ────────────────────────────── */
-
-@media (max-width: 768px) {
-  .desktop-only { display: none !important; }
-  .mobile-only  { display: flex !important; }
-}
-
+/* Desktop — side nav */
 @media (min-width: 769px) {
-  .mobile-only { display: none !important; }
+  .app-shell    { flex-direction: row; }
+  .side-nav     { display: flex !important; }
+  .bottom-nav   { display: none !important; }
+  .main-content { margin-left: var(--nav-w); padding-bottom: 40px; }
 }
 
-/* Safe area for iPhone notch / home indicator */
-.safe-bottom {
-  padding-bottom: env(safe-area-inset-bottom, 16px);
+/* Mobile — bottom nav */
+@media (max-width: 768px) {
+  .side-nav     { display: none !important; }
+  .bottom-nav   { display: flex !important; }
+  .main-content { margin-left: 0; }
+  .desktop-only { display: none !important; }
 }
 
-.safe-top {
-  padding-top: env(safe-area-inset-top, 0px);
-}
+/* PWA safe areas */
+.safe-top    { padding-top:    env(safe-area-inset-top, 0px); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 16px); }
 
-/* PWA standalone mode */
 @media (display-mode: standalone) {
-  .pwa-header {
-    padding-top: env(safe-area-inset-top, 44px) !important;
-  }
-  .pwa-bottom {
-    padding-bottom: env(safe-area-inset-bottom, 34px) !important;
-  }
+  .pwa-header { padding-top: max(env(safe-area-inset-top), 16px) !important; }
+  .bottom-nav { padding-bottom: env(safe-area-inset-bottom, 24px) !important; }
+}
+
+/* ── Form elements ── */
+.nomis-input {
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  width: 100%;
+  transition: all 0.15s;
+}
+
+.nomis-select {
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  width: 100%;
+  transition: all 0.15s;
+  cursor: pointer;
+}
+
+.nomis-btn {
+  width: 100%;
+  padding: 13px;
+  background: var(--green-dim);
+  border: 1px solid var(--green-glow);
+  border-radius: 10px;
+  color: var(--green);
+  font-family: var(--font-display);
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.nomis-btn:hover {
+  background: rgba(34,212,138,0.18);
+  border-color: rgba(34,212,138,0.45);
+}
+
+.nomis-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Page header ── */
+.page-header {
+  display: flex;
+  align-items: center;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--border);
+  gap: 14px;
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: #fff;
+  line-height: 1;
+}
+
+.page-sub {
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  color: var(--text3);
+  letter-spacing: 0.1em;
+  margin-top: 3px;
+}
+
+.progress-track { height: 2px; background: var(--border); }
+.progress-fill  { height: 100%; transition: width 0.5s ease; box-shadow: 0 0 8px currentColor; }
+
+/* ── Section labels ── */
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  color: var(--text3);
+  letter-spacing: 0.15em;
+  margin-bottom: 12px;
+}
+
+/* ── Cards ── */
+.info-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
 }
