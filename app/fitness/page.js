@@ -10,72 +10,147 @@ const MUSCLE_COLORS = {
   back:      '#00e5ff',
   biceps:    '#00e5ff',
   legs:      '#a78bfa',
+  quads:     '#a78bfa',
+  hamstring: '#a78bfa',
   core:      '#f59e0b',
-  cardio:    '#f87171',
+  abs:       '#f59e0b',
+}
+
+function getColor(muscleGroup, key) {
+  const mg = (muscleGroup || '').toLowerCase()
+  return mg.includes(key) ? MUSCLE_COLORS[key] : 'rgba(255,255,255,0.04)'
 }
 
 function BodyModel({ muscleGroup }) {
   const mg = (muscleGroup || '').toLowerCase()
-  const color = (group) => {
-    for (const [key, val] of Object.entries(MUSCLE_COLORS)) {
-      if (mg.includes(key)) return mg.includes(group) ? val : 'rgba(255,255,255,0.04)'
-    }
-    return 'rgba(255,255,255,0.04)'
-  }
-
   const isChest     = mg.includes('chest')
-  const isShoulders = mg.includes('shoulder')
-  const isTriceps   = mg.includes('tricep')
+  const isShoulder  = mg.includes('shoulder')
+  const isTricep    = mg.includes('tricep')
   const isBack      = mg.includes('back')
-  const isBiceps    = mg.includes('bicep')
+  const isBicep     = mg.includes('bicep')
   const isLegs      = mg.includes('leg') || mg.includes('quad') || mg.includes('hamstring')
   const isCore      = mg.includes('core') || mg.includes('ab')
 
-  const highlight = (active, key) => active
-    ? { fill: MUSCLE_COLORS[key], filter: `drop-shadow(0 0 6px ${MUSCLE_COLORS[key]})`, opacity: 0.9 }
-    : { fill: 'rgba(255,255,255,0.05)', opacity: 0.6 }
+  const activeColor = isChest || isShoulder || isTricep ? '#22d48a'
+    : isBack || isBicep ? '#00e5ff'
+    : isLegs ? '#a78bfa'
+    : isCore ? '#f59e0b'
+    : '#22d48a'
+
+  const glow = (active) => active ? `drop-shadow(0 0 5px ${activeColor})` : 'none'
 
   return (
-    <svg viewBox="0 0 100 220" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', maxHeight: '240px' }}>
+    <svg viewBox="0 0 100 230" fill="none" xmlns="http://www.w3.org/2000/svg"
+      style={{ width: '100%', maxHeight: '260px', overflow: 'visible' }}>
+
       {/* Head */}
-      <ellipse cx="50" cy="18" rx="12" ry="14" stroke="rgba(255,255,255,0.15)" strokeWidth="0.8" fill="rgba(255,255,255,0.03)" />
+      <ellipse cx="50" cy="17" rx="11" ry="13"
+        fill="rgba(255,255,255,0.03)"
+        stroke="rgba(255,255,255,0.12)" strokeWidth="0.7" />
+
       {/* Neck */}
-      <rect x="45" y="31" width="10" height="7" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.1)" strokeWidth="0.5" />
-      {/* Shoulders */}
-      <ellipse cx="24" cy="44" rx="10" ry="7" {...highlight(isShoulders, 'shoulders')} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5" />
-      <ellipse cx="76" cy="44" rx="10" ry="7" {...highlight(isShoulders, 'shoulders')} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5" />
-      {/* Chest */}
-      <path d="M34 38 L50 43 L50 62 L34 57 Z" {...highlight(isChest, 'chest')} stroke="rgba(255,255,255,0.08)" strokeWidth="0.5" />
-      <path d="M66 38 L50 43 L50 62 L66 57 Z" {...highlight(isChest, 'chest')} stroke="rgba(255,255,255,0.08)" strokeWidth="0.5" />
-      {/* Upper arms */}
-      <path d="M15 42 L12 72" stroke={isBack || isBiceps ? MUSCLE_COLORS['back'] : 'rgba(255,255,255,0.08)'} strokeWidth="7" strokeLinecap="round" opacity="0.7" />
-      <path d="M85 42 L88 72" stroke={isBack || isBiceps ? MUSCLE_COLORS['back'] : 'rgba(255,255,255,0.08)'} strokeWidth="7" strokeLinecap="round" opacity="0.7" />
-      {/* Triceps overlay */}
-      <path d="M13 48 L11 68" stroke={isTriceps ? MUSCLE_COLORS['triceps'] : 'transparent'} strokeWidth="3" strokeLinecap="round" opacity="0.9" style={isTriceps ? { filter: `drop-shadow(0 0 4px ${MUSCLE_COLORS['triceps']})` } : {}} />
-      <path d="M87 48 L89 68" stroke={isTriceps ? MUSCLE_COLORS['triceps'] : 'transparent'} strokeWidth="3" strokeLinecap="round" opacity="0.9" style={isTriceps ? { filter: `drop-shadow(0 0 4px ${MUSCLE_COLORS['triceps']})` } : {}} />
-      {/* Biceps overlay */}
-      <path d="M16 44 L13 64" stroke={isBiceps ? MUSCLE_COLORS['biceps'] : 'transparent'} strokeWidth="3" strokeLinecap="round" opacity="0.9" style={isBiceps ? { filter: `drop-shadow(0 0 4px ${MUSCLE_COLORS['biceps']})` } : {}} />
-      <path d="M84 44 L87 64" stroke={isBiceps ? MUSCLE_COLORS['biceps'] : 'transparent'} strokeWidth="3" strokeLinecap="round" opacity="0.9" />
+      <rect x="45.5" y="29" width="9" height="7"
+        fill="rgba(255,255,255,0.03)"
+        stroke="rgba(255,255,255,0.08)" strokeWidth="0.5" />
+
+      {/* Left shoulder */}
+      <ellipse cx="25" cy="43" rx="9" ry="6.5"
+        fill={isShoulder ? activeColor : 'rgba(255,255,255,0.04)'}
+        stroke="rgba(255,255,255,0.08)" strokeWidth="0.5"
+        style={{ filter: glow(isShoulder), opacity: isShoulder ? 0.85 : 0.7 }} />
+
+      {/* Right shoulder */}
+      <ellipse cx="75" cy="43" rx="9" ry="6.5"
+        fill={isShoulder ? activeColor : 'rgba(255,255,255,0.04)'}
+        stroke="rgba(255,255,255,0.08)" strokeWidth="0.5"
+        style={{ filter: glow(isShoulder), opacity: isShoulder ? 0.85 : 0.7 }} />
+
+      {/* Left pec */}
+      <path d="M34 37 L50 42 L50 61 L34 56 Z"
+        fill={isChest ? activeColor : 'rgba(255,255,255,0.04)'}
+        stroke="rgba(255,255,255,0.06)" strokeWidth="0.5"
+        style={{ filter: glow(isChest), opacity: isChest ? 0.85 : 0.7 }} />
+
+      {/* Right pec */}
+      <path d="M66 37 L50 42 L50 61 L66 56 Z"
+        fill={isChest ? activeColor : 'rgba(255,255,255,0.04)'}
+        stroke="rgba(255,255,255,0.06)" strokeWidth="0.5"
+        style={{ filter: glow(isChest), opacity: isChest ? 0.85 : 0.7 }} />
+
+      {/* Left upper arm */}
+      <path d="M16 41 L13 71" stroke="rgba(255,255,255,0.07)" strokeWidth="7" strokeLinecap="round" />
+
+      {/* Right upper arm */}
+      <path d="M84 41 L87 71" stroke="rgba(255,255,255,0.07)" strokeWidth="7" strokeLinecap="round" />
+
+      {/* Bicep highlight */}
+      {isBicep && <>
+        <path d="M17 43 L14 67" stroke={activeColor} strokeWidth="4" strokeLinecap="round"
+          style={{ filter: `drop-shadow(0 0 4px ${activeColor})`, opacity: 0.9 }} />
+        <path d="M83 43 L86 67" stroke={activeColor} strokeWidth="4" strokeLinecap="round"
+          style={{ filter: `drop-shadow(0 0 4px ${activeColor})`, opacity: 0.9 }} />
+      </>}
+
+      {/* Tricep highlight */}
+      {isTricep && <>
+        <path d="M14 47 L12 67" stroke={activeColor} strokeWidth="3" strokeLinecap="round"
+          style={{ filter: `drop-shadow(0 0 4px ${activeColor})`, opacity: 0.9 }} />
+        <path d="M86 47 L88 67" stroke={activeColor} strokeWidth="3" strokeLinecap="round"
+          style={{ filter: `drop-shadow(0 0 4px ${activeColor})`, opacity: 0.9 }} />
+      </>}
+
       {/* Forearms */}
-      <path d="M12 72 L14 100" stroke="rgba(255,255,255,0.06)" strokeWidth="5" strokeLinecap="round" />
-      <path d="M88 72 L86 100" stroke="rgba(255,255,255,0.06)" strokeWidth="5" strokeLinecap="round" />
-      {/* Torso */}
-      <path d="M34 38 L66 38 L70 100 L30 100 Z" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.06)" strokeWidth="0.5" />
-      {/* Back */}
-      <path d="M34 38 L66 38 L70 100 L30 100 Z" {...highlight(isBack, 'back')} opacity={isBack ? 0.3 : 0} />
+      <path d="M13 71 L15 98" stroke="rgba(255,255,255,0.05)" strokeWidth="5" strokeLinecap="round" />
+      <path d="M87 71 L85 98" stroke="rgba(255,255,255,0.05)" strokeWidth="5" strokeLinecap="round" />
+
+      {/* Torso outline */}
+      <path d="M34 37 L66 37 L70 100 L30 100 Z"
+        fill={isBack ? `${activeColor}22` : 'rgba(255,255,255,0.015)'}
+        stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" />
+
       {/* Abs */}
-      <path d="M38 64 L62 64 L60 100 L40 100 Z" {...highlight(isCore, 'core')} stroke="rgba(255,255,255,0.06)" strokeWidth="0.5" />
-      <line x1="40" y1="72" x2="60" y2="72" stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" />
-      <line x1="40" y1="82" x2="60" y2="82" stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" />
-      <line x1="50" y1="64" x2="50" y2="100" stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" />
-      {/* Quads */}
-      <path d="M30 100 L26 160 L44 160 L46 100 Z" {...highlight(isLegs, 'legs')} stroke="rgba(255,255,255,0.06)" strokeWidth="0.5" />
-      <path d="M70 100 L74 160 L56 160 L54 100 Z" {...highlight(isLegs, 'legs')} stroke="rgba(255,255,255,0.06)" strokeWidth="0.5" />
-      {/* Shins */}
-      <path d="M26 160 L28 195 L44 195 L44 160 Z" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" />
-      <path d="M74 160 L72 195 L56 195 L56 160 Z" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" />
+      <path d="M38 62 L62 62 L60 100 L40 100 Z"
+        fill={isCore ? activeColor : 'rgba(255,255,255,0.03)'}
+        stroke="rgba(255,255,255,0.05)" strokeWidth="0.5"
+        style={{ filter: glow(isCore), opacity: isCore ? 0.7 : 0.6 }} />
+      <line x1="40" y1="72" x2="60" y2="72" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" />
+      <line x1="40" y1="83" x2="60" y2="83" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" />
+      <line x1="50" y1="62" x2="50" y2="100" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" />
+
+      {/* Left quad */}
+      <path d="M30 100 L26 162 L44 162 L46 100 Z"
+        fill={isLegs ? activeColor : 'rgba(255,255,255,0.04)'}
+        stroke="rgba(255,255,255,0.06)" strokeWidth="0.5"
+        style={{ filter: glow(isLegs), opacity: isLegs ? 0.8 : 0.6 }} />
+
+      {/* Right quad */}
+      <path d="M70 100 L74 162 L56 162 L54 100 Z"
+        fill={isLegs ? activeColor : 'rgba(255,255,255,0.04)'}
+        stroke="rgba(255,255,255,0.06)" strokeWidth="0.5"
+        style={{ filter: glow(isLegs), opacity: isLegs ? 0.8 : 0.6 }} />
+
+      {/* Left shin */}
+      <path d="M26 162 L28 198 L44 198 L44 162 Z"
+        fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" />
+
+      {/* Right shin */}
+      <path d="M74 162 L72 198 L56 198 L56 162 Z"
+        fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" />
+
       {/* Label */}
-      <text x="50" y="215" textAnchor="middle" fill="rgba(255,255,255,0.15)" fontFamily="monospace" fontSize="4.5" letterSpacing="2">ANTERIOR</text>
+      <text x="50" y="218" textAnchor="middle"
+        fill="rgba(255,255,255,0.12)"
+        fontFamily="monospace" fontSize="4" letterSpacing="2.5">ANTERIOR VIEW</text>
+
+      {/* Active muscle label */}
+      {muscleGroup && (
+        <text x="50" y="228" textAnchor="middle"
+          fill={activeColor}
+          fontFamily="monospace" fontSize="3.5" letterSpacing="2"
+          style={{ filter: `drop-shadow(0 0 4px ${activeColor})` }}>
+          {muscleGroup.toUpperCase()}
+        </text>
+      )}
     </svg>
   )
 }
@@ -93,6 +168,7 @@ export default function Fitness() {
   const [chatInput, setChatInput]           = useState('')
   const [chatHistory, setChatHistory]       = useState([])
   const [chatLoading, setChatLoading]       = useState(false)
+  const [view, setView]                     = useState('list') // 'list' | 'logger' | 'body'
   const chatEndRef                          = useRef(null)
 
   useEffect(() => {
@@ -115,6 +191,7 @@ export default function Fitness() {
 
   function openExercise(ex) {
     setActiveExercise(ex)
+    setView('logger')
     if (!sets[ex.id]) {
       setSets(prev => ({
         ...prev,
@@ -141,19 +218,19 @@ export default function Fitness() {
     }
     setExercises(prev => prev.map(ex => ex.id === activeExercise.id ? { ...ex, done: true } : ex))
     setActiveExercise(null)
+    setView('list')
     setSaving(false)
   }
 
-async function sendChat() {
-  if (!chatInput.trim() || chatLoading) return
-  const msg = chatInput.trim()
-  setChatInput('')
-  setChatLoading(true)
-  const userMsg = { role: 'user', content: msg }
-  setChatHistory(prev => [...prev, userMsg])
+  async function sendChat() {
+    if (!chatInput.trim() || chatLoading) return
+    const msg = chatInput.trim()
+    setChatInput('')
+    setChatLoading(true)
+    const userMsg = { role: 'user', content: msg }
+    setChatHistory(prev => [...prev, userMsg])
 
-  // Build context about current workout
-  const context = workout ? `
+    const context = workout ? `
 Current workout context:
 - Day: ${workout.day} (${workout.program})
 - Muscle group: ${workout.muscle_group}
@@ -163,210 +240,311 @@ Current workout context:
 
 User message: ${msg}` : msg
 
-  try {
-    const res = await chat(context, chatHistory)
-    if (res.response) {
-      setChatHistory(prev => [...prev, { role: 'assistant', content: res.response }])
+    try {
+      const res = await chat(context, chatHistory)
+      if (res.response) {
+        setChatHistory(prev => [...prev, { role: 'assistant', content: res.response }])
+      }
+    } catch (e) {
+      setChatHistory(prev => [...prev, { role: 'assistant', content: 'Connection error.' }])
     }
-  } catch (e) {
-    setChatHistory(prev => [...prev, { role: 'assistant', content: 'Connection error. Try again.' }])
+    setChatLoading(false)
   }
-  setChatLoading(false)
-}
 
   const completed = exercises.filter(e => e.done).length
   const pct = exercises.length ? Math.round((completed / exercises.length) * 100) : 0
 
   if (loading) return (
-    <div style={{ ...s.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={s.loadingScreen}>
+      <div style={s.loadingOrb} className="animate-orb">N</div>
       <div style={s.loadingText}>Loading workout...</div>
     </div>
   )
 
   if (!workout) return (
-    <div style={{ ...s.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={s.loadingScreen}>
+      <div style={s.loadingOrb}>N</div>
       <div style={s.loadingText}>No workout scheduled for today.</div>
     </div>
   )
 
   return (
-    <div style={s.page}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
-        input::placeholder { color: #2a2a40; }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: rgba(34,212,138,0.2); border-radius: 2px; }
-        .ex-row:hover { background: rgba(255,255,255,0.02) !important; padding-left: 8px !important; }
-        .chat-send:hover { background: rgba(34,212,138,0.2) !important; }
-        .log-btn:hover { background: rgba(34,212,138,0.18) !important; }
-      `}</style>
+    <div style={s.page} className="safe-top">
 
       {/* PR Toast */}
       {newPR && (
         <div style={s.prToast} onClick={() => setNewPR(null)}>
-          🏆 NEW PR — {newPR.exercise}: {newPR.weight} lbs
-          <span style={{ marginLeft: '12px', opacity: 0.5, fontSize: '0.7rem' }}>tap to dismiss</span>
+          <span>🏆</span>
+          <span>NEW PR — {newPR.exercise}: <strong>{newPR.weight} lbs</strong></span>
+          <span style={{ opacity: 0.4, fontSize: '0.65rem' }}>✕</span>
         </div>
       )}
 
       {/* Header */}
-      <header style={s.header}>
-        <Link href="/" style={s.backBtn}>← BACK</Link>
+      <header style={s.header} className="pwa-header">
+        <Link href="/" style={s.backBtn}>
+          <span style={s.backArrow}>‹</span>
+          <span>BACK</span>
+        </Link>
+
         <div style={s.headerCenter}>
           <div style={s.headerTitle}>FITNESS</div>
           <div style={s.headerSub}>{workout.day} · {workout.program}</div>
         </div>
-        <div style={s.headerStats}>
-          <div style={s.statPill}>
-            <span style={s.statVal}>{completed}/{exercises.length}</span>
-            <span style={s.statLabel}>DONE</span>
+
+        <div style={s.headerRight}>
+          <div style={s.statBlock}>
+            <span style={s.statNum}>{completed}/{exercises.length}</span>
+            <span style={s.statLbl}>DONE</span>
           </div>
-          <div style={s.statPill}>
-            <span style={{ ...s.statVal, color: pct === 100 ? '#22d48a' : '#e8e8f0' }}>{pct}%</span>
-            <span style={s.statLabel}>COMPLETE</span>
+          <div style={{ ...s.statBlock, marginLeft: '10px' }}>
+            <span style={{ ...s.statNum, color: pct === 100 ? 'var(--green)' : 'var(--text)' }}>{pct}%</span>
+            <span style={s.statLbl}>COMP</span>
           </div>
         </div>
       </header>
 
       {/* Progress bar */}
-      <div style={s.progressBar}>
+      <div style={s.progressTrack}>
         <div style={{ ...s.progressFill, width: `${pct}%` }} />
       </div>
 
-      {/* Main content */}
-      <div style={s.body}>
-
-        {/* Left — exercise list */}
-        <div style={s.leftCol}>
-          <div style={s.colLabel}>// TODAY — {workout.day?.toUpperCase()}</div>
-          <div style={s.muscleTag}>{workout.muscle_group?.toUpperCase()}</div>
-          <div style={s.exList}>
-            {exercises.map(ex => (
-              <div
-                key={ex.id}
-                className="ex-row"
-                onClick={() => openExercise(ex)}
-                style={{
-                  ...s.exRow,
-                  ...(ex.done ? s.exRowDone : {}),
-                  ...(activeExercise?.id === ex.id ? s.exRowActive : {}),
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                <div
-                  style={{ ...s.check, ...(ex.done ? s.checkDone : {}) }}
-                  onClick={e => { e.stopPropagation() }}
-                >
-                  {ex.done ? '✓' : ''}
-                </div>
-                <div style={s.exTextWrap}>
-                  <div style={s.exName}>{ex.name}</div>
-                  <div style={s.exMeta}>{ex.sets} sets · {ex.reps} reps · {ex.equipment}</div>
-                </div>
-                <div style={s.exChevron}>›</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Middle — set logger */}
-        <div style={s.midCol}>
-          {activeExercise ? (
-            <>
-              <div style={s.colLabel}>{activeExercise.name.toUpperCase()}</div>
-              <div style={s.exMetaLarge}>{activeExercise.sets} sets · {activeExercise.reps} reps</div>
-              {activeExercise.notes && (
-                <div style={s.coachNote}>💡 {activeExercise.notes}</div>
-              )}
-              <div style={s.setGrid}>
-                <div style={s.setGridHeader}>
-                  <span>SET</span><span>WEIGHT</span><span>REPS</span>
-                </div>
-                {(sets[activeExercise.id] || []).map((s_, i) => (
-                  <div key={i} style={s.setRow}>
-                    <span style={s.setNum}>{s_.set}</span>
-                    <input
-                      style={s.setInput}
-                      type="number"
-                      placeholder="lbs"
-                      value={s_.weight}
-                      onChange={e => updateSet(activeExercise.id, i, 'weight', e.target.value)}
-                    />
-                    <input
-                      style={s.setInput}
-                      type="number"
-                      placeholder="reps"
-                      value={s_.reps}
-                      onChange={e => updateSet(activeExercise.id, i, 'reps', e.target.value)}
-                    />
-                  </div>
-                ))}
-              </div>
-              <button
-                className="log-btn"
-                style={{ ...s.logBtn, opacity: saving ? 0.5 : 1 }}
-                onClick={completeExercise}
-                disabled={saving}
-              >
-                {saving ? 'SAVING...' : 'MARK COMPLETE'}
-              </button>
-            </>
-          ) : (
-            <div style={s.emptyLogger}>
-              <div style={s.emptyIcon}>←</div>
-              <div style={s.emptyText}>Select an exercise</div>
-              <div style={s.emptySubtext}>to log your sets</div>
-            </div>
-          )}
-        </div>
-
-        {/* Right — body model */}
-        <div style={s.rightCol}>
-          <div style={s.colLabel}>// MUSCLE MAP</div>
-          <div style={s.bodyModelWrap}>
-            <BodyModel muscleGroup={activeExercise?.muscle_group || workout.muscle_group} />
-          </div>
-          <div style={s.muscleLabel}>
-            {(activeExercise?.muscle_group || workout.muscle_group || '').toUpperCase()}
-          </div>
-        </div>
-
+      {/* Mobile nav tabs */}
+      <div style={s.mobileTabs} className="mobile-only">
+        {['list', 'logger', 'body'].map(tab => (
+          <button
+            key={tab}
+            style={{ ...s.mobileTab, ...(view === tab ? s.mobileTabActive : {}) }}
+            onClick={() => setView(tab)}
+          >
+            {tab === 'list' ? 'EXERCISES' : tab === 'logger' ? 'LOG SETS' : 'BODY MAP'}
+          </button>
+        ))}
       </div>
 
-      {/* NOMIS Chat Bar */}
-      <div style={s.chatBarWrap}>
+      {/* Desktop layout */}
+      <div style={s.desktopBody} className="desktop-only">
+        {/* Exercise list */}
+        <div style={s.panel}>
+          <ExerciseList
+            exercises={exercises}
+            activeExercise={activeExercise}
+            workout={workout}
+            onSelect={openExercise}
+          />
+        </div>
+
+        {/* Set logger */}
+        <div style={s.panel}>
+          <SetLogger
+            activeExercise={activeExercise}
+            sets={sets}
+            saving={saving}
+            onUpdateSet={updateSet}
+            onComplete={completeExercise}
+          />
+        </div>
+
+        {/* Body model */}
+        <div style={{ ...s.panel, alignItems: 'center' }}>
+          <div style={s.panelLabel}>// MUSCLE MAP</div>
+          <div style={s.bodyWrap}>
+            <BodyModel muscleGroup={activeExercise?.muscle_group || workout.muscle_group} />
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile layout - single panel view */}
+      <div style={s.mobileBody} className="mobile-only">
+        {view === 'list' && (
+          <ExerciseList
+            exercises={exercises}
+            activeExercise={activeExercise}
+            workout={workout}
+            onSelect={openExercise}
+          />
+        )}
+        {view === 'logger' && (
+          <SetLogger
+            activeExercise={activeExercise}
+            sets={sets}
+            saving={saving}
+            onUpdateSet={updateSet}
+            onComplete={completeExercise}
+          />
+        )}
+        {view === 'body' && (
+          <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={s.panelLabel}>// MUSCLE MAP</div>
+            <div style={{ ...s.bodyWrap, maxWidth: '240px' }}>
+              <BodyModel muscleGroup={activeExercise?.muscle_group || workout.muscle_group} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* NOMIS Chat */}
+      <div style={s.chatWrap} className="pwa-bottom safe-bottom">
         {chatOpen && (
           <div style={s.chatPanel}>
             <div style={s.chatMessages}>
               {chatHistory.length === 0 && (
-                <div style={s.chatEmpty}>Ask NOMIS anything about your workout...</div>
+                <div style={s.chatPlaceholder}>
+                  Ask NOMIS anything about your workout...
+                </div>
               )}
               {chatHistory.map((msg, i) => (
-                <div key={i} style={msg.role === 'user' ? s.chatMsgUser : s.chatMsgNomis}>
-                  {msg.content}
+                <div key={i} style={msg.role === 'user' ? s.msgUser : s.msgNomis}>
+                  {msg.role === 'assistant' && <span style={s.msgPrefix}>NOMIS</span>}
+                  <div>{msg.content}</div>
                 </div>
               ))}
-              {chatLoading && <div style={s.chatMsgNomis}>...</div>}
+              {chatLoading && (
+                <div style={s.msgNomis}>
+                  <span style={s.msgPrefix}>NOMIS</span>
+                  <div style={s.typing}>
+                    <span>●</span><span>●</span><span>●</span>
+                  </div>
+                </div>
+              )}
               <div ref={chatEndRef} />
             </div>
           </div>
         )}
+
         <div style={s.chatBar}>
-          <button style={s.orbBtn} onClick={() => setChatOpen(o => !o)}>N</button>
+          <button
+            style={s.orbBtn}
+            className="orb-btn animate-orb"
+            onClick={() => setChatOpen(o => !o)}
+          >
+            N
+          </button>
           <input
             style={s.chatInput}
-            placeholder="Ask NOMIS... 'How many sets left?' or 'Log bench 185 x 5'"
+            placeholder="Ask NOMIS..."
             value={chatInput}
             onChange={e => setChatInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && sendChat()}
             onFocus={() => setChatOpen(true)}
           />
-          <button className="chat-send" style={s.chatSend} onClick={sendChat}>→</button>
+          <button
+            style={s.sendBtn}
+            className="btn-chat-send"
+            onClick={sendChat}
+          >
+            ›
+          </button>
         </div>
       </div>
 
+      <style>{`
+        @keyframes typingBounce {
+          0%, 80%, 100% { transform: translateY(0); opacity: 0.3; }
+          40% { transform: translateY(-4px); opacity: 1; }
+        }
+        .typing span {
+          display: inline-block;
+          animation: typingBounce 1.2s infinite;
+          margin: 0 1px;
+          font-size: 0.5rem;
+          color: var(--green);
+        }
+        .typing span:nth-child(2) { animation-delay: 0.2s; }
+        .typing span:nth-child(3) { animation-delay: 0.4s; }
+      `}</style>
+    </div>
+  )
+}
+
+function ExerciseList({ exercises, activeExercise, workout, onSelect }) {
+  return (
+    <div style={s.panelContent}>
+      <div style={s.panelLabel}>// TODAY — {workout?.day?.toUpperCase()}</div>
+      <div style={s.muscleTag}>{(workout?.muscle_group || '').toUpperCase()}</div>
+      {exercises.map(ex => (
+        <div
+          key={ex.id}
+          className="ex-row"
+          onClick={() => onSelect(ex)}
+          style={{
+            ...s.exRow,
+            ...(ex.done ? s.exRowDone : {}),
+            ...(activeExercise?.id === ex.id ? s.exRowActive : {}),
+          }}
+        >
+          <div style={{ ...s.check, ...(ex.done ? s.checkDone : {}) }}>
+            {ex.done ? '✓' : ''}
+          </div>
+          <div style={s.exText}>
+            <div style={s.exName}>{ex.name}</div>
+            <div style={s.exMeta}>{ex.sets} sets · {ex.reps} reps · {ex.equipment}</div>
+          </div>
+          <div style={s.exChev}>›</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function SetLogger({ activeExercise, sets, saving, onUpdateSet, onComplete }) {
+  if (!activeExercise) return (
+    <div style={s.emptyState}>
+      <div style={s.emptyIcon}>‹ ‹</div>
+      <div style={s.emptyText}>Select an exercise</div>
+      <div style={s.emptySub}>to start logging sets</div>
+    </div>
+  )
+
+  return (
+    <div style={s.panelContent}>
+      <div style={s.panelLabel}>{activeExercise.name.toUpperCase()}</div>
+      <div style={s.loggerMeta}>{activeExercise.sets} sets · {activeExercise.reps} reps</div>
+
+      {activeExercise.notes && (
+        <div style={s.coachNote}>
+          <span style={s.coachIcon}>💡</span>
+          <span>{activeExercise.notes}</span>
+        </div>
+      )}
+
+      <div style={s.setTable}>
+        <div style={s.setHeader}>
+          <span>SET</span>
+          <span>WEIGHT (LBS)</span>
+          <span>REPS</span>
+        </div>
+        {(sets[activeExercise.id] || []).map((sv, i) => (
+          <div key={i} style={s.setRow}>
+            <span style={s.setNum}>{sv.set}</span>
+            <input
+              className="set-input"
+              style={s.setInput}
+              type="number"
+              placeholder="0"
+              value={sv.weight}
+              onChange={e => onUpdateSet(activeExercise.id, i, 'weight', e.target.value)}
+            />
+            <input
+              className="set-input"
+              style={s.setInput}
+              type="number"
+              placeholder="0"
+              value={sv.reps}
+              onChange={e => onUpdateSet(activeExercise.id, i, 'reps', e.target.value)}
+            />
+          </div>
+        ))}
+      </div>
+
+      <button
+        className="btn-complete"
+        style={{ ...s.completeBtn, opacity: saving ? 0.5 : 1 }}
+        onClick={onComplete}
+        disabled={saving}
+      >
+        {saving ? '● SAVING...' : '✓ MARK COMPLETE'}
+      </button>
     </div>
   )
 }
@@ -374,138 +552,190 @@ User message: ${msg}` : msg
 const s = {
   page: {
     minHeight: '100vh',
-    background: '#060910',
-    fontFamily: "'Rajdhani', sans-serif",
-    paddingBottom: '100px',
+    minHeight: '100dvh',
+    background: 'var(--bg)',
+    paddingBottom: '90px',
+    position: 'relative',
+  },
+  loadingScreen: {
+    minHeight: '100vh',
+    background: 'var(--bg)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '20px',
+  },
+  loadingOrb: {
+    width: '60px',
+    height: '60px',
+    borderRadius: '18px',
+    background: 'radial-gradient(circle at 35% 35%, rgba(34,212,138,0.3), rgba(34,212,138,0.05))',
+    border: '1px solid rgba(34,212,138,0.3)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontFamily: 'var(--font-display)',
+    fontSize: '1.5rem',
+    fontWeight: '700',
+    color: 'var(--green)',
   },
   loadingText: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.8rem',
-    color: '#333350',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.7rem',
+    color: 'var(--text3)',
     letterSpacing: '0.1em',
   },
   prToast: {
     position: 'fixed',
     top: '20px',
     right: '20px',
-    background: 'rgba(34,212,138,0.12)',
-    border: '1px solid rgba(34,212,138,0.3)',
+    background: 'rgba(6,9,16,0.95)',
+    border: '1px solid rgba(34,212,138,0.4)',
     borderRadius: '12px',
-    padding: '14px 20px',
-    fontSize: '0.78rem',
-    fontWeight: '700',
-    color: '#22d48a',
-    letterSpacing: '0.08em',
+    padding: '14px 18px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    fontFamily: 'var(--font-display)',
+    fontSize: '0.82rem',
+    fontWeight: '600',
+    color: 'var(--green)',
+    letterSpacing: '0.06em',
     cursor: 'pointer',
-    zIndex: 200,
-    backdropFilter: 'blur(10px)',
+    zIndex: 300,
+    backdropFilter: 'blur(20px)',
+    boxShadow: '0 4px 24px rgba(34,212,138,0.15)',
   },
   header: {
     display: 'flex',
     alignItems: 'center',
-    padding: '24px 40px 20px',
-    gap: '20px',
-    borderBottom: '1px solid rgba(255,255,255,0.04)',
+    padding: '20px 24px 16px',
+    gap: '12px',
+    borderBottom: '1px solid var(--border)',
   },
   backBtn: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.65rem',
-    color: '#333350',
-    textDecoration: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.6rem',
+    color: 'var(--text3)',
     letterSpacing: '0.1em',
     flexShrink: 0,
   },
+  backArrow: {
+    fontSize: '1.2rem',
+    lineHeight: 1,
+    marginTop: '-1px',
+  },
   headerCenter: {
     flex: 1,
+    textAlign: 'center',
   },
   headerTitle: {
-    fontSize: '1.5rem',
+    fontFamily: 'var(--font-display)',
+    fontSize: '1.3rem',
     fontWeight: '700',
     letterSpacing: '0.2em',
-    color: '#ffffff',
+    color: '#fff',
     lineHeight: 1,
   },
   headerSub: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.6rem',
-    color: '#333350',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.5rem',
+    color: 'var(--text3)',
     letterSpacing: '0.1em',
     marginTop: '3px',
   },
-  headerStats: {
+  headerRight: {
     display: 'flex',
-    gap: '12px',
+    alignItems: 'center',
+    flexShrink: 0,
   },
-  statPill: {
+  statBlock: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     gap: '2px',
-    padding: '8px 16px',
-    background: 'rgba(255,255,255,0.02)',
-    border: '1px solid rgba(255,255,255,0.05)',
-    borderRadius: '8px',
   },
-  statVal: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.9rem',
-    color: '#e8e8f0',
-    fontWeight: '500',
+  statNum: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.88rem',
+    color: 'var(--text)',
     lineHeight: 1,
   },
-  statLabel: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.45rem',
-    color: '#333350',
-    letterSpacing: '0.12em',
+  statLbl: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.42rem',
+    color: 'var(--text3)',
+    letterSpacing: '0.1em',
   },
-  progressBar: {
+  progressTrack: {
     height: '2px',
     background: 'rgba(255,255,255,0.04)',
   },
   progressFill: {
     height: '100%',
-    background: '#22d48a',
+    background: 'var(--green)',
     transition: 'width 0.5s ease',
-    boxShadow: '0 0 8px rgba(34,212,138,0.6)',
+    boxShadow: '0 0 10px rgba(34,212,138,0.5)',
   },
-  body: {
+  mobileTabs: {
+    display: 'none',
+    borderBottom: '1px solid var(--border)',
+  },
+  mobileTab: {
+    flex: 1,
+    padding: '12px 8px',
+    background: 'transparent',
+    border: 'none',
+    borderBottom: '2px solid transparent',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.52rem',
+    color: 'var(--text3)',
+    letterSpacing: '0.1em',
+    cursor: 'pointer',
+    transition: 'all 0.15s',
+  },
+  mobileTabActive: {
+    color: 'var(--green)',
+    borderBottomColor: 'var(--green)',
+  },
+  desktopBody: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr 280px',
-    gap: '0',
-    minHeight: 'calc(100vh - 160px)',
+    gridTemplateColumns: '1fr 1fr 260px',
+    minHeight: 'calc(100vh - 130px)',
+    minHeight: 'calc(100dvh - 130px)',
   },
-  leftCol: {
-    padding: '28px 32px',
-    borderRight: '1px solid rgba(255,255,255,0.04)',
+  mobileBody: {
+    display: 'none',
   },
-  midCol: {
-    padding: '28px 32px',
-    borderRight: '1px solid rgba(255,255,255,0.04)',
-  },
-  rightCol: {
-    padding: '28px 24px',
+  panel: {
+    borderRight: '1px solid var(--border)',
+    padding: '24px',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
+    overflowY: 'auto',
   },
-  colLabel: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.55rem',
-    color: '#333350',
+  panelContent: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  panelLabel: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.52rem',
+    color: 'var(--text3)',
     letterSpacing: '0.15em',
     marginBottom: '6px',
   },
   muscleTag: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.65rem',
-    color: '#22d48a',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.62rem',
+    color: 'var(--green)',
     letterSpacing: '0.1em',
     marginBottom: '20px',
-  },
-  exList: {
-    display: 'flex',
-    flexDirection: 'column',
+    textShadow: '0 0 10px rgba(34,212,138,0.3)',
   },
   exRow: {
     display: 'flex',
@@ -517,14 +747,10 @@ const s = {
     paddingRight: '4px',
     borderBottom: '1px solid rgba(255,255,255,0.03)',
     cursor: 'pointer',
-    borderRadius: '4px',
+    borderRadius: '6px',
   },
-  exRowDone: {
-    opacity: 0.35,
-  },
-  exRowActive: {
-    paddingLeft: '8px',
-  },
+  exRowDone: { opacity: 0.3 },
+  exRowActive: { paddingLeft: '8px' },
   check: {
     width: '18px',
     height: '18px',
@@ -533,108 +759,38 @@ const s = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '0.65rem',
+    fontSize: '0.6rem',
     flexShrink: 0,
-    color: '#22d48a',
+    color: 'var(--green)',
+    transition: 'all 0.15s',
   },
   checkDone: {
-    background: 'rgba(34,212,138,0.08)',
+    background: 'rgba(34,212,138,0.1)',
     borderColor: 'rgba(34,212,138,0.4)',
   },
-  exTextWrap: {
-    flex: 1,
-  },
+  exText: { flex: 1 },
   exName: {
-    fontSize: '0.88rem',
+    fontFamily: 'var(--font-display)',
+    fontSize: '0.9rem',
     fontWeight: '600',
-    color: '#d0d0e8',
+    color: 'var(--text)',
     marginBottom: '2px',
     letterSpacing: '0.02em',
   },
   exMeta: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.55rem',
-    color: '#2a2a40',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.52rem',
+    color: 'var(--text3)',
     letterSpacing: '0.05em',
   },
-  exChevron: {
-    fontSize: '1.1rem',
-    color: '#222235',
+  exChev: {
+    fontFamily: 'var(--font-display)',
+    fontSize: '1.2rem',
+    color: 'var(--text4)',
+    lineHeight: 1,
   },
-  exMetaLarge: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.65rem',
-    color: '#444460',
-    letterSpacing: '0.08em',
-    marginBottom: '16px',
-  },
-  coachNote: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.65rem',
-    color: '#444460',
-    background: 'rgba(255,255,255,0.02)',
-    border: '1px solid rgba(255,255,255,0.05)',
-    borderRadius: '8px',
-    padding: '10px 14px',
-    marginBottom: '20px',
-    lineHeight: '1.6',
-  },
-  setGrid: {
-    marginBottom: '20px',
-  },
-  setGridHeader: {
-    display: 'grid',
-    gridTemplateColumns: '36px 1fr 1fr',
-    gap: '10px',
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.5rem',
-    color: '#2a2a40',
-    letterSpacing: '0.12em',
-    marginBottom: '10px',
-    paddingBottom: '8px',
-    borderBottom: '1px solid rgba(255,255,255,0.03)',
-  },
-  setRow: {
-    display: 'grid',
-    gridTemplateColumns: '36px 1fr 1fr',
-    gap: '10px',
-    marginBottom: '8px',
-    alignItems: 'center',
-  },
-  setNum: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.75rem',
-    color: '#333350',
-    fontWeight: '500',
-  },
-  setInput: {
-    background: '#0a0f18',
-    border: '1px solid rgba(255,255,255,0.07)',
-    borderRadius: '8px',
-    padding: '10px 12px',
-    color: '#e8e8f0',
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.88rem',
-    outline: 'none',
-    width: '100%',
-    transition: 'border-color 0.15s',
-  },
-  logBtn: {
-    width: '100%',
-    padding: '13px',
-    background: 'rgba(34,212,138,0.08)',
-    border: '1px solid rgba(34,212,138,0.2)',
-    borderRadius: '10px',
-    color: '#22d48a',
-    fontFamily: "'Rajdhani', sans-serif",
-    fontSize: '0.85rem',
-    fontWeight: '700',
-    letterSpacing: '0.12em',
-    cursor: 'pointer',
-    transition: 'background 0.15s',
-  },
-  emptyLogger: {
-    height: '100%',
+  emptyState: {
+    flex: 1,
     minHeight: '300px',
     display: 'flex',
     flexDirection: 'column',
@@ -643,39 +799,107 @@ const s = {
     gap: '6px',
   },
   emptyIcon: {
-    fontSize: '1.5rem',
-    color: '#1a1a28',
+    fontFamily: 'var(--font-display)',
+    fontSize: '1.8rem',
+    color: 'var(--text4)',
     marginBottom: '8px',
+    letterSpacing: '-4px',
   },
   emptyText: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.7rem',
-    color: '#222235',
-    letterSpacing: '0.08em',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.65rem',
+    color: 'var(--text4)',
+    letterSpacing: '0.1em',
   },
-  emptySubtext: {
-    fontFamily: "'JetBrains Mono', monospace",
+  emptySub: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.55rem',
+    color: 'var(--text4)',
+    letterSpacing: '0.1em',
+    opacity: 0.6,
+  },
+  loggerMeta: {
+    fontFamily: 'var(--font-mono)',
     fontSize: '0.6rem',
-    color: '#1a1a28',
+    color: 'var(--text3)',
     letterSpacing: '0.08em',
+    marginBottom: '16px',
   },
-  bodyModelWrap: {
+  coachNote: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'flex-start',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.62rem',
+    color: 'var(--text3)',
+    background: 'rgba(255,255,255,0.02)',
+    border: '1px solid var(--border)',
+    borderRadius: '8px',
+    padding: '10px 12px',
+    marginBottom: '20px',
+    lineHeight: '1.6',
+  },
+  coachIcon: { flexShrink: 0 },
+  setTable: { marginBottom: '20px' },
+  setHeader: {
+    display: 'grid',
+    gridTemplateColumns: '32px 1fr 1fr',
+    gap: '10px',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.48rem',
+    color: 'var(--text3)',
+    letterSpacing: '0.12em',
+    marginBottom: '10px',
+    paddingBottom: '8px',
+    borderBottom: '1px solid var(--border)',
+  },
+  setRow: {
+    display: 'grid',
+    gridTemplateColumns: '32px 1fr 1fr',
+    gap: '10px',
+    marginBottom: '8px',
+    alignItems: 'center',
+  },
+  setNum: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.75rem',
+    color: 'var(--text3)',
+    fontWeight: '600',
+  },
+  setInput: {
+    background: 'var(--bg3)',
+    border: '1px solid var(--border2)',
+    borderRadius: '8px',
+    padding: '10px 12px',
+    color: 'var(--text)',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.9rem',
     width: '100%',
+    transition: 'all 0.15s',
+  },
+  completeBtn: {
+    width: '100%',
+    padding: '14px',
+    background: 'var(--green-dim)',
+    border: '1px solid var(--green-glow)',
+    borderRadius: '10px',
+    color: 'var(--green)',
+    fontFamily: 'var(--font-display)',
+    fontSize: '0.88rem',
+    fontWeight: '700',
+    letterSpacing: '0.1em',
+    cursor: 'pointer',
+    transition: 'all 0.15s',
+  },
+  bodyWrap: {
+    width: '100%',
+    flex: 1,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
     padding: '16px 0',
   },
-  muscleLabel: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.55rem',
-    color: '#22d48a',
-    letterSpacing: '0.15em',
-    marginTop: '8px',
-    textAlign: 'center',
-  },
-  chatBarWrap: {
+  chatWrap: {
     position: 'fixed',
     bottom: 0,
     left: 0,
@@ -684,104 +908,113 @@ const s = {
   },
   chatPanel: {
     background: 'rgba(6,9,16,0.97)',
-    borderTop: '1px solid rgba(255,255,255,0.05)',
-    maxHeight: '260px',
+    borderTop: '1px solid var(--border)',
+    maxHeight: '280px',
     overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'column',
+    backdropFilter: 'blur(20px)',
   },
   chatMessages: {
-    flex: 1,
     overflowY: 'auto',
+    maxHeight: '280px',
     padding: '16px 20px',
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
   },
-  chatEmpty: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.65rem',
-    color: '#222235',
-    letterSpacing: '0.08em',
+  chatPlaceholder: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.6rem',
+    color: 'var(--text4)',
     textAlign: 'center',
-    marginTop: '16px',
+    letterSpacing: '0.08em',
+    padding: '20px 0',
   },
-  chatMsgNomis: {
+  msgNomis: {
     alignSelf: 'flex-start',
-    background: 'rgba(34,212,138,0.05)',
-    border: '1px solid rgba(34,212,138,0.1)',
-    borderRadius: '10px',
-    borderTopLeftRadius: '2px',
-    padding: '10px 14px',
-    fontSize: '0.82rem',
-    color: '#c0c0d8',
-    maxWidth: '80%',
-    lineHeight: '1.5',
-    fontFamily: "'Rajdhani', sans-serif",
+    maxWidth: '85%',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
   },
-  chatMsgUser: {
+  msgUser: {
     alignSelf: 'flex-end',
+    maxWidth: '85%',
     background: 'rgba(255,255,255,0.04)',
-    border: '1px solid rgba(255,255,255,0.06)',
-    borderRadius: '10px',
-    borderTopRightRadius: '2px',
+    border: '1px solid var(--border)',
+    borderRadius: '12px',
+    borderTopRightRadius: '3px',
     padding: '10px 14px',
-    fontSize: '0.82rem',
-    color: '#888899',
-    maxWidth: '80%',
+    fontFamily: 'var(--font-display)',
+    fontSize: '0.85rem',
+    color: 'var(--text2)',
     lineHeight: '1.5',
-    fontFamily: "'Rajdhani', sans-serif",
+  },
+  msgPrefix: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.48rem',
+    color: 'var(--green)',
+    letterSpacing: '0.15em',
+    opacity: 0.7,
+  },
+  typing: {
+    display: 'flex',
+    gap: '3px',
+    padding: '8px 0',
   },
   chatBar: {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
-    padding: '12px 20px 16px',
+    padding: '10px 16px 14px',
     background: 'rgba(6,9,16,0.98)',
-    borderTop: '1px solid rgba(255,255,255,0.05)',
-    backdropFilter: 'blur(20px)',
+    borderTop: '1px solid var(--border)',
   },
   orbBtn: {
-    width: '42px',
-    height: '42px',
-    borderRadius: '12px',
-    background: 'radial-gradient(circle at 35% 35%, #22d48a, #0a6644)',
-    boxShadow: '0 0 16px rgba(34,212,138,0.35)',
-    border: 'none',
-    color: '#060910',
-    fontSize: '1rem',
-    fontWeight: '800',
-    fontFamily: "'Rajdhani', sans-serif",
+    width: '44px',
+    height: '44px',
+    borderRadius: '14px',
+    background: 'radial-gradient(circle at 35% 35%, rgba(34,212,138,0.4), rgba(34,212,138,0.05))',
+    border: '1px solid rgba(34,212,138,0.4)',
+    color: 'var(--green)',
+    fontFamily: 'var(--font-display)',
+    fontSize: '1.1rem',
+    fontWeight: '700',
     cursor: 'pointer',
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    letterSpacing: '0.05em',
+    transition: 'box-shadow 0.2s',
   },
   chatInput: {
     flex: 1,
     background: 'rgba(255,255,255,0.03)',
-    border: '1px solid rgba(255,255,255,0.07)',
+    border: '1px solid var(--border2)',
     borderRadius: '12px',
     padding: '12px 16px',
-    color: '#e8e8f0',
-    fontFamily: "'Rajdhani', sans-serif",
-    fontSize: '0.88rem',
+    color: 'var(--text)',
+    fontFamily: 'var(--font-display)',
+    fontSize: '0.9rem',
+    letterSpacing: '0.02em',
     outline: 'none',
+    transition: 'border-color 0.15s',
   },
-  chatSend: {
-    width: '42px',
-    height: '42px',
+  sendBtn: {
+    width: '44px',
+    height: '44px',
     borderRadius: '12px',
-    background: 'rgba(34,212,138,0.08)',
-    border: '1px solid rgba(34,212,138,0.2)',
-    color: '#22d48a',
-    fontSize: '1.1rem',
+    background: 'var(--green-dim)',
+    border: '1px solid var(--green-glow)',
+    color: 'var(--green)',
+    fontSize: '1.4rem',
+    fontFamily: 'var(--font-display)',
     cursor: 'pointer',
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    lineHeight: 1,
     transition: 'background 0.15s',
   },
 }
