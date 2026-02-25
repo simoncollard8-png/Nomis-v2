@@ -430,15 +430,36 @@ export default function Workout() {
   }
 
   async function loadSchedule() {
-    const programs = await dbRead('programs', { active:true })
-    if (!programs.length) return
-    const plans = await dbRead('workout_plans', { program_id: programs[0].id })
-    const schedule = {}
-    DAYS.forEach(d => {
-      const plan = plans.find(p => p.day_of_week === d)
-      schedule[d] = plan ? plan.muscle_group : 'Rest'
-    })
-    setWeekSchedule(schedule)
+    try {
+      const rows = await dbRead('user_schedule', {})
+      const schedule = {}
+      DAYS.forEach(d => {
+        const row = rows.find(r => r.day_of_week === d)
+        schedule[d] = row ? row.muscle_group : 'Rest'
+      })
+      setWeekSchedule(schedule)
+    } catch(e) {
+      // table may not exist yet, use defaults
+      const schedule = {}
+      DAYS.forEach(d => { schedule[d] = 'Rest' })
+      setWeekSchedule(schedule)
+    }
+  }
+
+  async function saveScheduleDay(day, type) {
+    setWeekSchedule(prev => ({ ...prev, [day]: type }))
+    setEditingDay(null)
+    try {
+      // Try update first, then insert
+      const existing = await dbRead('user_schedule', { day_of_week: day })
+      if (existing.length) {
+        await dbWrite('user_schedule', 'update', { muscle_group: type }, { day_of_week: day })
+      } else {
+        await dbWrite('user_schedule', 'insert', { day_of_week: day, muscle_group: type })
+      }
+    } catch(e) {
+      console.error('Schedule save failed:', e)
+    }
   }
 
   async function handleStart() {
@@ -637,7 +658,7 @@ export default function Workout() {
                       {WORKOUT_TYPES.map(type => (
                         <button key={type}
                           style={{ ...s.typeBtn, ...(weekSchedule?.[day]===type ? s.typeBtnActive:{}) }}
-                          onClick={() => { setWeekSchedule(prev=>({...prev,[day]:type})); setEditingDay(null) }}>
+                          onClick={() => saveScheduleDay(day, type)}>
                           {type}
                         </button>
                       ))}
