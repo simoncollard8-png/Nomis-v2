@@ -2,10 +2,20 @@
 import { useState, useEffect } from 'react'
 import Shell from '../../components/Shell'
 import NomisChat from '../../components/NomisChat'
-import { dbRead } from '../../lib/api'
+import { dbRead, dbWrite } from '../../lib/api'
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const DAY_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+const LOG_TYPES = [
+  { key: 'workout',   label: 'Workout',   color: 'var(--cyan)',   colorDim: 'var(--cyan-dim)',   colorBorder: 'var(--cyan-border)' },
+  { key: 'nutrition', label: 'Meal',      color: 'var(--orange)', colorDim: 'var(--orange-dim)', colorBorder: 'var(--orange-border)' },
+  { key: 'sleep',     label: 'Sleep',     color: 'var(--teal)',   colorDim: 'var(--teal-dim)',   colorBorder: 'var(--teal-border)' },
+  { key: 'cardio',    label: 'Cardio',    color: '#a78bfa',       colorDim: 'rgba(167,139,250,0.08)', colorBorder: 'rgba(167,139,250,0.2)' },
+  { key: 'body',      label: 'Body Stats', color: 'var(--text2)', colorDim: 'rgba(145,152,165,0.08)', colorBorder: 'rgba(145,152,165,0.2)' },
+]
+const WORKOUT_TYPES = ['Push', 'Pull', 'Legs', 'Upper', 'Lower', 'Full Body', 'Cardio']
+const MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner', 'Snack']
+const SLEEP_QUALITY = ['great', 'good', 'okay', 'poor', 'bad']
 
 export default function Calendar() {
   const [currentMonth, setCurrentMonth] = useState(new Date())
@@ -15,15 +25,26 @@ export default function Calendar() {
   const [loading, setLoading]           = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
 
+  // Add modal
+  const [showAdd, setShowAdd]         = useState(false)
+  const [addType, setAddType]         = useState(null)
+  const [saving, setSaving]           = useState(false)
+  const [saveToast, setSaveToast]     = useState(null)
+
+  // Form states
+  const [workoutForm, setWorkoutForm] = useState({ muscle_group: 'Push', title: '', description: '', feeling: '', duration_min: '' })
+  const [mealForm, setMealForm]       = useState({ meal: 'Lunch', description: '', calories: '', protein: '', carbs: '', fat: '' })
+  const [sleepForm, setSleepForm]     = useState({ duration: '', quality: 'good', notes: '' })
+  const [cardioForm, setCardioForm]   = useState({ activity: 'Walk', duration_min: '', distance: '', notes: '' })
+  const [bodyForm, setBodyForm]       = useState({ weight: '', body_fat: '', notes: '' })
+
   useEffect(() => { loadMonthData() }, [currentMonth])
 
   async function loadMonthData() {
     setLoading(true)
     const year = currentMonth.getFullYear()
     const month = currentMonth.getMonth()
-    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
     const lastDay = new Date(year, month + 1, 0).getDate()
-    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${lastDay}`
 
     try {
       const [workouts, sleep, nutrition, cardio, bodyStats] = await Promise.all([
@@ -34,7 +55,6 @@ export default function Calendar() {
         dbRead('body_stats', {}, { order: 'date', limit: 100 }),
       ])
 
-      // Build a map of date -> what was logged
       const data = {}
       for (let d = 1; d <= lastDay; d++) {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
@@ -80,6 +100,101 @@ export default function Calendar() {
     setDayDetail(null)
   }
 
+  function openAddModal(typeKey) {
+    setAddType(typeKey)
+    setShowAdd(true)
+    // Reset forms
+    setWorkoutForm({ muscle_group: 'Push', title: '', description: '', feeling: '', duration_min: '' })
+    setMealForm({ meal: 'Lunch', description: '', calories: '', protein: '', carbs: '', fat: '' })
+    setSleepForm({ duration: '', quality: 'good', notes: '' })
+    setCardioForm({ activity: 'Walk', duration_min: '', distance: '', notes: '' })
+    setBodyForm({ weight: '', body_fat: '', notes: '' })
+  }
+
+  function showToast(msg) {
+    setSaveToast(msg)
+    setTimeout(() => setSaveToast(null), 2500)
+  }
+
+  async function handleSave() {
+    if (!selectedDate || !addType) return
+    setSaving(true)
+
+    try {
+      switch (addType) {
+        case 'workout':
+          if (!workoutForm.muscle_group) break
+          await dbWrite('workouts', 'insert', {
+            date: selectedDate,
+            muscle_group: workoutForm.muscle_group,
+            title: workoutForm.title || `${workoutForm.muscle_group} Day`,
+            description: workoutForm.description || '',
+            feeling: workoutForm.feeling || null,
+            duration_min: parseInt(workoutForm.duration_min) || null,
+          })
+          showToast('Workout logged')
+          break
+
+        case 'nutrition':
+          if (!mealForm.description) break
+          await dbWrite('nutrition', 'insert', {
+            date: selectedDate,
+            meal: mealForm.meal.toLowerCase(),
+            description: mealForm.description,
+            calories: parseInt(mealForm.calories) || null,
+            protein_g: parseInt(mealForm.protein) || null,
+            carbs_g: parseInt(mealForm.carbs) || null,
+            fat_g: parseInt(mealForm.fat) || null,
+          })
+          showToast('Meal logged')
+          break
+
+        case 'sleep':
+          if (!sleepForm.duration) break
+          await dbWrite('sleep', 'insert', {
+            date: selectedDate,
+            duration_hrs: parseFloat(sleepForm.duration) || null,
+            quality: sleepForm.quality || null,
+            notes: sleepForm.notes || '',
+          })
+          showToast('Sleep logged')
+          break
+
+        case 'cardio':
+          if (!cardioForm.activity) break
+          await dbWrite('cardio', 'insert', {
+            date: selectedDate,
+            activity: cardioForm.activity,
+            duration_min: parseInt(cardioForm.duration_min) || null,
+            distance_miles: parseFloat(cardioForm.distance) || null,
+            notes: cardioForm.notes || '',
+          })
+          showToast('Cardio logged')
+          break
+
+        case 'body':
+          if (!bodyForm.weight) break
+          await dbWrite('body_stats', 'insert', {
+            date: selectedDate,
+            weight_lbs: parseFloat(bodyForm.weight) || null,
+            body_fat_pct: parseFloat(bodyForm.body_fat) || null,
+            notes: bodyForm.notes || '',
+          })
+          showToast('Body stats logged')
+          break
+      }
+
+      setShowAdd(false)
+      setAddType(null)
+      await loadDayDetail(selectedDate)
+      await loadMonthData()
+    } catch (err) {
+      console.error('Save error:', err)
+      showToast('Failed to save')
+    }
+    setSaving(false)
+  }
+
   // Build calendar grid
   const year = currentMonth.getFullYear()
   const month = currentMonth.getMonth()
@@ -96,9 +211,18 @@ export default function Calendar() {
     ? selectedDateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
     : ''
 
+  const activeLogType = LOG_TYPES.find(t => t.key === addType)
+
   return (
     <Shell title="Calendar">
       <div style={s.page}>
+
+        {/* Save toast */}
+        {saveToast && (
+          <div style={s.toast} className="animate-fadeIn">
+            <span className="mono">{saveToast}</span>
+          </div>
+        )}
 
         {/* Month nav */}
         <div style={s.monthNav}>
@@ -207,7 +331,7 @@ export default function Calendar() {
                     const pro = n.protein_g || '--'
                     return (
                       <div style={s.detailRow}>
-                        <span style={s.detailRowTitle}>{n.meal}{n.description ? ` — ${n.description}` : ''}</span>
+                        <span style={s.detailRowTitle}>{n.description || n.meal || 'Meal'}</span>
                         <span style={s.detailRowMeta} className="mono">{cals} cal / {pro}g protein</span>
                       </div>
                     )
@@ -222,8 +346,8 @@ export default function Calendar() {
                   empty="No sleep logged"
                   renderItem={(sl) => (
                     <div style={s.detailRow}>
-                      <span style={s.detailRowTitle}>{sl.duration_hrs || sl.duration_hours}h sleep</span>
-                      <span style={s.detailRowMeta} className="mono">{sl.quality || '--'}</span>
+                      <span style={s.detailRowTitle}>{sl.duration_hrs || sl.duration_hours}h</span>
+                      <span style={s.detailRowMeta} className="mono">Quality: {sl.quality || '--'}</span>
                     </div>
                   )}
                 />
@@ -258,12 +382,194 @@ export default function Calendar() {
                   )}
                 />
 
-                {/* Backfill hint */}
-                <div style={s.backfillHint} className="mono">
-                  Use the NOMIS chat to backfill — "I did chest on {selectedDate}, bench 185x5"
+                {/* Add data buttons */}
+                <div style={s.addSection}>
+                  <div style={s.addLabel} className="mono">Log data for this day</div>
+                  <div style={s.addGrid}>
+                    {LOG_TYPES.map(t => (
+                      <button
+                        key={t.key}
+                        style={{
+                          ...s.addTypeBtn,
+                          borderColor: t.colorBorder,
+                          background: t.colorDim,
+                          color: t.color,
+                        }}
+                        onClick={() => openAddModal(t.key)}
+                      >
+                        + {t.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Add Data Modal ── */}
+        {showAdd && addType && (
+          <div style={s.modalOverlay} onClick={(e) => { if (e.target === e.currentTarget) { setShowAdd(false); setAddType(null) } }}>
+            <div style={s.modal} className="animate-fadeIn">
+              <div style={s.modalHeader}>
+                <div>
+                  <span style={{ ...s.modalTitle, color: activeLogType?.color }}>Log {activeLogType?.label}</span>
+                  <div className="mono" style={s.modalDate}>{selectedLabel}</div>
+                </div>
+                <button style={s.modalClose} onClick={() => { setShowAdd(false); setAddType(null) }}>
+                  <span style={{ position: 'absolute', width: '14px', height: '1.5px', background: 'var(--text3)', transform: 'rotate(45deg)' }} />
+                  <span style={{ position: 'absolute', width: '14px', height: '1.5px', background: 'var(--text3)', transform: 'rotate(-45deg)' }} />
+                </button>
+              </div>
+
+              <div style={s.formBody}>
+
+                {/* ── Workout form ── */}
+                {addType === 'workout' && (
+                  <>
+                    <div style={s.formLabel} className="mono">Type</div>
+                    <div style={s.chipRow}>
+                      {WORKOUT_TYPES.map(t => (
+                        <button key={t} style={{
+                          ...s.chip,
+                          ...(workoutForm.muscle_group === t ? { background: 'var(--cyan-dim)', borderColor: 'var(--cyan-border)', color: 'var(--cyan)' } : {}),
+                        }} onClick={() => setWorkoutForm(p => ({ ...p, muscle_group: t }))}>{t}</button>
+                      ))}
+                    </div>
+                    <input style={s.input} placeholder="Title (optional)" value={workoutForm.title} onChange={e => setWorkoutForm(p => ({ ...p, title: e.target.value }))} />
+                    <input style={s.input} placeholder="Description — exercises, notes" value={workoutForm.description} onChange={e => setWorkoutForm(p => ({ ...p, description: e.target.value }))} />
+                    <div style={s.inputRow}>
+                      <div style={s.inputHalf}>
+                        <div style={s.formLabel} className="mono">Duration (min)</div>
+                        <input style={s.input} className="mono" type="number" inputMode="numeric" placeholder="--" value={workoutForm.duration_min} onChange={e => setWorkoutForm(p => ({ ...p, duration_min: e.target.value }))} />
+                      </div>
+                      <div style={s.inputHalf}>
+                        <div style={s.formLabel} className="mono">Feeling</div>
+                        <div style={s.chipRow}>
+                          {['great','good','okay','rough'].map(f => (
+                            <button key={f} style={{
+                              ...s.chipSm,
+                              ...(workoutForm.feeling === f ? { background: 'var(--cyan-dim)', borderColor: 'var(--cyan-border)', color: 'var(--cyan)' } : {}),
+                            }} onClick={() => setWorkoutForm(p => ({ ...p, feeling: f }))}>{f}</button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* ── Meal form ── */}
+                {addType === 'nutrition' && (
+                  <>
+                    <div style={s.formLabel} className="mono">Meal</div>
+                    <div style={s.chipRow}>
+                      {MEAL_TYPES.map(t => (
+                        <button key={t} style={{
+                          ...s.chip,
+                          ...(mealForm.meal === t ? { background: 'var(--orange-dim)', borderColor: 'var(--orange-border)', color: 'var(--orange)' } : {}),
+                        }} onClick={() => setMealForm(p => ({ ...p, meal: t }))}>{t}</button>
+                      ))}
+                    </div>
+                    <input style={s.input} placeholder="What did you eat?" value={mealForm.description} onChange={e => setMealForm(p => ({ ...p, description: e.target.value }))} />
+                    <div style={s.macroGrid}>
+                      <div style={s.macroWrap}>
+                        <div style={s.formLabelSm} className="mono">Cal</div>
+                        <input style={s.inputSm} className="mono" type="number" inputMode="numeric" placeholder="--" value={mealForm.calories} onChange={e => setMealForm(p => ({ ...p, calories: e.target.value }))} />
+                      </div>
+                      <div style={s.macroWrap}>
+                        <div style={s.formLabelSm} className="mono">Protein</div>
+                        <input style={s.inputSm} className="mono" type="number" inputMode="numeric" placeholder="--" value={mealForm.protein} onChange={e => setMealForm(p => ({ ...p, protein: e.target.value }))} />
+                      </div>
+                      <div style={s.macroWrap}>
+                        <div style={s.formLabelSm} className="mono">Carbs</div>
+                        <input style={s.inputSm} className="mono" type="number" inputMode="numeric" placeholder="--" value={mealForm.carbs} onChange={e => setMealForm(p => ({ ...p, carbs: e.target.value }))} />
+                      </div>
+                      <div style={s.macroWrap}>
+                        <div style={s.formLabelSm} className="mono">Fat</div>
+                        <input style={s.inputSm} className="mono" type="number" inputMode="numeric" placeholder="--" value={mealForm.fat} onChange={e => setMealForm(p => ({ ...p, fat: e.target.value }))} />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* ── Sleep form ── */}
+                {addType === 'sleep' && (
+                  <>
+                    <div style={s.formLabel} className="mono">Duration (hours)</div>
+                    <input style={s.input} className="mono" type="number" inputMode="decimal" step="0.5" placeholder="7.5" value={sleepForm.duration} onChange={e => setSleepForm(p => ({ ...p, duration: e.target.value }))} />
+                    <div style={s.formLabel} className="mono">Quality</div>
+                    <div style={s.chipRow}>
+                      {SLEEP_QUALITY.map(q => (
+                        <button key={q} style={{
+                          ...s.chip,
+                          ...(sleepForm.quality === q ? { background: 'var(--teal-dim)', borderColor: 'var(--teal-border)', color: 'var(--teal)' } : {}),
+                        }} onClick={() => setSleepForm(p => ({ ...p, quality: q }))}>{q}</button>
+                      ))}
+                    </div>
+                    <input style={s.input} placeholder="Notes (optional)" value={sleepForm.notes} onChange={e => setSleepForm(p => ({ ...p, notes: e.target.value }))} />
+                  </>
+                )}
+
+                {/* ── Cardio form ── */}
+                {addType === 'cardio' && (
+                  <>
+                    <div style={s.formLabel} className="mono">Activity</div>
+                    <div style={s.chipRow}>
+                      {['Walk', 'Run', 'Bike', 'Swim', 'Hike', 'Row', 'Other'].map(a => (
+                        <button key={a} style={{
+                          ...s.chip,
+                          ...(cardioForm.activity === a ? { background: 'rgba(167,139,250,0.08)', borderColor: 'rgba(167,139,250,0.2)', color: '#a78bfa' } : {}),
+                        }} onClick={() => setCardioForm(p => ({ ...p, activity: a }))}>{a}</button>
+                      ))}
+                    </div>
+                    <div style={s.inputRow}>
+                      <div style={s.inputHalf}>
+                        <div style={s.formLabel} className="mono">Duration (min)</div>
+                        <input style={s.input} className="mono" type="number" inputMode="numeric" placeholder="--" value={cardioForm.duration_min} onChange={e => setCardioForm(p => ({ ...p, duration_min: e.target.value }))} />
+                      </div>
+                      <div style={s.inputHalf}>
+                        <div style={s.formLabel} className="mono">Distance (mi)</div>
+                        <input style={s.input} className="mono" type="number" inputMode="decimal" placeholder="--" value={cardioForm.distance} onChange={e => setCardioForm(p => ({ ...p, distance: e.target.value }))} />
+                      </div>
+                    </div>
+                    <input style={s.input} placeholder="Notes (optional)" value={cardioForm.notes} onChange={e => setCardioForm(p => ({ ...p, notes: e.target.value }))} />
+                  </>
+                )}
+
+                {/* ── Body stats form ── */}
+                {addType === 'body' && (
+                  <>
+                    <div style={s.inputRow}>
+                      <div style={s.inputHalf}>
+                        <div style={s.formLabel} className="mono">Weight (lbs)</div>
+                        <input style={s.input} className="mono" type="number" inputMode="decimal" placeholder="--" value={bodyForm.weight} onChange={e => setBodyForm(p => ({ ...p, weight: e.target.value }))} />
+                      </div>
+                      <div style={s.inputHalf}>
+                        <div style={s.formLabel} className="mono">Body fat %</div>
+                        <input style={s.input} className="mono" type="number" inputMode="decimal" placeholder="--" value={bodyForm.body_fat} onChange={e => setBodyForm(p => ({ ...p, body_fat: e.target.value }))} />
+                      </div>
+                    </div>
+                    <input style={s.input} placeholder="Notes (optional)" value={bodyForm.notes} onChange={e => setBodyForm(p => ({ ...p, notes: e.target.value }))} />
+                  </>
+                )}
+
+                {/* Save button */}
+                <button
+                  style={{
+                    ...s.saveBtn,
+                    borderColor: activeLogType?.colorBorder,
+                    background: `linear-gradient(135deg, ${activeLogType?.colorDim}, transparent)`,
+                    color: activeLogType?.color,
+                    opacity: saving ? 0.5 : 1,
+                  }}
+                  onClick={handleSave}
+                  disabled={saving}
+                >
+                  {saving ? 'Saving...' : `Log ${activeLogType?.label}`}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -294,6 +600,15 @@ function DetailSection({ title, color, items, empty, renderItem }) {
 // ── Styles ──────────────────────────────────────────────────────────────────
 const s = {
   page: { padding: '8px 0 40px' },
+
+  // Toast
+  toast: {
+    position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)',
+    zIndex: 600, background: 'rgba(45,212,191,0.1)', border: '1px solid var(--teal-border)',
+    borderRadius: '12px', padding: '10px 20px',
+    fontSize: '0.6rem', color: 'var(--teal)', letterSpacing: '0.06em',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+  },
 
   // Month nav
   monthNav: {
@@ -429,9 +744,89 @@ const s = {
     marginTop: '3px', display: 'block',
   },
 
-  // Backfill hint
-  backfillHint: {
-    fontSize: '0.5rem', color: 'var(--text3)', letterSpacing: '0.04em',
-    textAlign: 'center', padding: '8px 0 0', opacity: 0.6,
+  // Add section
+  addSection: {
+    borderTop: '1px solid var(--border)', paddingTop: '16px', marginTop: '4px',
+  },
+  addLabel: {
+    fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.1em',
+    textTransform: 'uppercase', marginBottom: '10px',
+  },
+  addGrid: {
+    display: 'flex', flexWrap: 'wrap', gap: '6px',
+  },
+  addTypeBtn: {
+    padding: '8px 14px', borderRadius: '8px', border: '1px solid',
+    fontSize: '0.68rem', fontWeight: '500', cursor: 'pointer',
+    fontFamily: 'var(--font-body)', transition: 'all 0.15s',
+  },
+
+  // Modal
+  modalOverlay: {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+    backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+    zIndex: 500, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+  },
+  modal: {
+    width: '100%', maxWidth: '480px', background: 'var(--bg2)',
+    border: '1px solid var(--border2)', borderRadius: '20px 20px 0 0',
+    maxHeight: '85vh', overflowY: 'auto',
+  },
+  modalHeader: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+    padding: '20px 20px 12px',
+  },
+  modalTitle: { fontSize: '1rem', fontWeight: '700' },
+  modalDate: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.06em', marginTop: '4px' },
+  modalClose: {
+    width: '28px', height: '28px', borderRadius: '7px', background: 'transparent',
+    border: 'none', position: 'relative', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+
+  // Form
+  formBody: { padding: '0 20px 24px', display: 'flex', flexDirection: 'column', gap: '12px' },
+  formLabel: {
+    fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.1em',
+    textTransform: 'uppercase', marginBottom: '-4px',
+  },
+  formLabelSm: {
+    fontSize: '0.42rem', color: 'var(--text3)', letterSpacing: '0.1em',
+    textTransform: 'uppercase', textAlign: 'center', marginBottom: '4px',
+  },
+  input: {
+    width: '100%', padding: '12px 14px', borderRadius: '10px',
+    border: '1px solid var(--border2)', background: 'var(--bg3)',
+    color: 'var(--text)', fontSize: '0.88rem', fontFamily: 'var(--font-body)',
+    outline: 'none',
+  },
+  inputRow: { display: 'flex', gap: '10px' },
+  inputHalf: { flex: 1 },
+  inputSm: {
+    width: '100%', padding: '10px 8px', borderRadius: '8px',
+    border: '1px solid var(--border2)', background: 'var(--bg3)',
+    color: 'var(--text)', fontSize: '0.82rem', textAlign: 'center',
+    outline: 'none',
+  },
+  macroGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px' },
+  macroWrap: { display: 'flex', flexDirection: 'column' },
+  chipRow: { display: 'flex', flexWrap: 'wrap', gap: '5px' },
+  chip: {
+    padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border)',
+    background: 'transparent', color: 'var(--text3)', fontSize: '0.72rem',
+    fontWeight: '500', cursor: 'pointer', fontFamily: 'var(--font-body)',
+    transition: 'all 0.15s',
+  },
+  chipSm: {
+    padding: '5px 8px', borderRadius: '6px', border: '1px solid var(--border)',
+    background: 'transparent', color: 'var(--text3)', fontSize: '0.6rem',
+    fontWeight: '500', cursor: 'pointer', fontFamily: 'var(--font-body)',
+    transition: 'all 0.15s',
+  },
+  saveBtn: {
+    width: '100%', padding: '15px', marginTop: '4px',
+    borderRadius: '12px', border: '1px solid',
+    fontFamily: 'var(--font-body)', fontSize: '0.88rem', fontWeight: '600',
+    cursor: 'pointer', transition: 'opacity 0.15s',
   },
 }
