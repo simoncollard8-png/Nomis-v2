@@ -33,13 +33,15 @@ export default function Train() {
   const [showAddExercise, setShowAddExercise] = useState(false)
   const [suggestions, setSuggestions]   = useState([])
   const [suggestLoading, setSuggestLoading] = useState(false)
+  const [sessionComplete, setSessionComplete] = useState(false)
+  const [completeSaving, setCompleteSaving] = useState(false)
 
   const [selectedDate, setSelectedDate] = useState(new Date())
 
   useEffect(() => { loadWorkout() }, [selectedDate])
 
   useEffect(() => {
-    if (!sessionStart) return
+    if (!sessionStart || sessionComplete) return
     const id = setInterval(() => {
       const diff = Math.floor((Date.now() - sessionStart) / 1000)
       const h = String(Math.floor(diff / 3600)).padStart(2, '0')
@@ -48,7 +50,7 @@ export default function Train() {
       setElapsed(`${h}:${m}:${sec}`)
     }, 1000)
     return () => clearInterval(id)
-  }, [sessionStart])
+  }, [sessionStart, sessionComplete])
 
   async function loadWorkout() {
     setLoading(true)
@@ -99,6 +101,7 @@ export default function Train() {
       setSetData(init)
       setCompletedEx({})
       setActiveIdx(null)
+      setSessionComplete(false)
     } catch (err) {
       console.error('Failed to get exercises:', err)
     }
@@ -187,6 +190,55 @@ export default function Train() {
     setActiveIdx(null)
   }
 
+  // ── Complete Session handler ──────────────────────────────────────────────
+  async function handleCompleteSession() {
+    if (completedCount === 0 || completeSaving || sessionComplete) return
+    setCompleteSaving(true)
+
+    try {
+      let wid = workoutId
+
+      // If session wasn't started yet (user logged all exercises individually), start it
+      if (!wid) {
+        wid = await handleStart()
+      }
+
+      if (wid) {
+        // Calculate total duration
+        const durationMin = sessionStart
+          ? Math.round((Date.now() - sessionStart) / 60000)
+          : null
+
+        // Calculate total volume
+        let totalVolume = 0
+        let totalSets = 0
+        exercises.forEach(ex => {
+          const sets = setData[ex.id] || []
+          sets.forEach(s => {
+            const w = parseFloat(s.weight) || 0
+            const r = parseInt(s.reps) || 0
+            if (w > 0 && r > 0) {
+              totalVolume += w * r
+              totalSets++
+            }
+          })
+        })
+
+        // Update the workout record with session summary
+        await dbWrite('workouts', 'update', {
+          feeling: null,
+          duration_min: durationMin,
+          description: exercises.map(e => e.name).join(', '),
+        }, { id: wid })
+      }
+
+      setSessionComplete(true)
+    } catch (err) {
+      console.error('Complete session error:', err)
+    }
+    setCompleteSaving(false)
+  }
+
   function updateSet(exId, setIdx, field, val) {
     setSetData(prev => ({
       ...prev,
@@ -198,6 +250,15 @@ export default function Train() {
     const d = new Date(selectedDate)
     d.setDate(d.getDate() + dir)
     setSelectedDate(d)
+  }
+
+  function resetSession() {
+    setSessionComplete(false)
+    setWorkoutId(null)
+    setCompletedEx({})
+    setSessionStart(null)
+    setElapsed('00:00:00')
+    loadWorkout()
   }
 
   const completedCount = Object.keys(completedEx).length
@@ -233,6 +294,54 @@ export default function Train() {
 
         {prToast && (
           <div style={s.prToast} onClick={() => setPrToast(null)}>{prToast}</div>
+        )}
+
+        {/* Session complete overlay */}
+        {sessionComplete && (
+          <div style={s.completeOverlay} className="animate-fadeIn">
+            <div style={s.completeCard} className="card">
+              <div style={s.completeIcon}>✓</div>
+              <div style={s.completeTitle}>Session Complete</div>
+              <div style={s.completeSub} className="mono">
+                {workout?.muscle_group} — {completedCount} exercise{completedCount !== 1 ? 's' : ''} — {elapsed}
+              </div>
+
+              {/* Session summary */}
+              <div style={s.completeSummary}>
+                <div style={s.completeStat}>
+                  <div style={{ ...s.completeStatVal, color: 'var(--cyan)' }} className="mono">{completedCount}</div>
+                  <div style={s.completeStatLabel} className="mono">Exercises</div>
+                </div>
+                <div style={s.completeStat}>
+                  <div style={{ ...s.completeStatVal, color: 'var(--orange)' }} className="mono">
+                    {exercises.reduce((a, ex) => {
+                      const sets = setData[ex.id] || []
+                      return a + sets.filter(s => s.weight && s.reps).length
+                    }, 0)}
+                  </div>
+                  <div style={s.completeStatLabel} className="mono">Sets logged</div>
+                </div>
+                <div style={s.completeStat}>
+                  <div style={{ ...s.completeStatVal, color: 'var(--teal)' }} className="mono">
+                    {(() => {
+                      let vol = 0
+                      exercises.forEach(ex => {
+                        (setData[ex.id] || []).forEach(s => {
+                          vol += (parseFloat(s.weight) || 0) * (parseInt(s.reps) || 0)
+                        })
+                      })
+                      return vol > 1000 ? `${(vol / 1000).toFixed(1)}k` : vol
+                    })()}
+                  </div>
+                  <div style={s.completeStatLabel} className="mono">Volume (lbs)</div>
+                </div>
+              </div>
+
+              <button style={s.completeDoneBtn} onClick={resetSession}>
+                Done
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Date navigator */}
@@ -309,7 +418,7 @@ export default function Train() {
                   <div style={{ ...s.statValue, color: 'var(--orange)' }} className="mono">{exercises.length}</div>
                   <div style={s.statLabel} className="mono">Exercises</div>
                 </div>
-                <div style={s.statCell}>
+                <div style={{ ...s.statCell, borderRight: 'none' }}>
                   <div style={{ ...s.statValue, color: 'var(--teal)' }} className="mono">
                     {exercises.reduce((a, ex) => a + (ex.sets || 4), 0)}
                   </div>
@@ -515,14 +624,18 @@ export default function Train() {
           </div>
         )}
 
-        {/* Submit */}
-        {exercises.length > 0 && (
+        {/* Complete Session button */}
+        {exercises.length > 0 && !sessionComplete && (
           <div style={s.submitSection}>
-            <button style={{
-              ...s.submitBtn,
-              opacity: completedCount === 0 ? 0.4 : 1,
-            }}>
-              Complete Session
+            <button
+              style={{
+                ...s.submitBtn,
+                opacity: completedCount === 0 || completeSaving ? 0.4 : 1,
+              }}
+              onClick={handleCompleteSession}
+              disabled={completedCount === 0 || completeSaving}
+            >
+              {completeSaving ? 'Finishing...' : 'Complete Session'}
             </button>
           </div>
         )}
@@ -546,6 +659,53 @@ const s = {
     borderRadius: '12px', padding: '12px 20px', fontFamily: 'var(--font-mono)',
     fontSize: '0.65rem', color: 'var(--teal)', letterSpacing: '0.06em',
     cursor: 'pointer', boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+  },
+
+  // Complete overlay
+  completeOverlay: {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+    backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+    zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: '24px',
+  },
+  completeCard: {
+    width: '100%', maxWidth: '380px', padding: '40px 28px 32px',
+    textAlign: 'center',
+  },
+  completeIcon: {
+    width: '56px', height: '56px', borderRadius: '16px',
+    background: 'var(--teal-dim)', border: '1px solid var(--teal-border)',
+    color: 'var(--teal)', fontSize: '1.5rem', fontWeight: '700',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    margin: '0 auto 20px',
+  },
+  completeTitle: {
+    fontSize: '1.3rem', fontWeight: '700', color: '#fff',
+    marginBottom: '8px',
+  },
+  completeSub: {
+    fontSize: '0.55rem', color: 'var(--text3)', letterSpacing: '0.06em',
+    marginBottom: '28px',
+  },
+  completeSummary: {
+    display: 'flex', gap: '4px', marginBottom: '28px',
+  },
+  completeStat: {
+    flex: 1, padding: '16px 8px', background: 'var(--bg3)',
+    borderRadius: '10px', border: '1px solid var(--border)',
+  },
+  completeStatVal: {
+    fontSize: '1.1rem', fontWeight: '600', lineHeight: 1, marginBottom: '6px',
+  },
+  completeStatLabel: {
+    fontSize: '0.42rem', color: 'var(--text3)', letterSpacing: '0.1em', textTransform: 'uppercase',
+  },
+  completeDoneBtn: {
+    width: '100%', padding: '15px', borderRadius: 'var(--radius-md)',
+    border: '1px solid var(--teal-border)',
+    background: 'linear-gradient(135deg, rgba(45,212,191,0.12), rgba(45,212,191,0.04))',
+    color: 'var(--teal)', fontFamily: 'var(--font-body)',
+    fontSize: '0.9rem', fontWeight: '600', cursor: 'pointer',
   },
 
   // Date nav
