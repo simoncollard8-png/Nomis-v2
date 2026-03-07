@@ -2,17 +2,20 @@
 import { useState, useEffect } from 'react'
 import Shell from '../../components/Shell'
 import NomisChat from '../../components/NomisChat'
-import { getTodaysNutrition, getRecentNutrition, logNutrition } from '../../lib/api'
+import { getTodaysNutrition, getRecentNutrition, logNutrition, dbRead, dbWrite } from '../../lib/api'
 
 const MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner', 'Snack']
 
 export default function Nutrition() {
   const [todayMeals, setTodayMeals] = useState([])
   const [recentDays, setRecentDays] = useState([])
+  const [savedMeals, setSavedMeals] = useState([])
   const [loading, setLoading]       = useState(true)
   const [showAdd, setShowAdd]       = useState(false)
   const [saving, setSaving]         = useState(false)
-  const [selectedDate, setSelectedDate] = useState(new Date())
+  const [quickToast, setQuickToast] = useState(null)
+  const [showSaveToggle, setShowSaveToggle] = useState(false)
+  const [saveName, setSaveName]     = useState('')
 
   // Form state
   const [meal, setMeal]         = useState('Lunch')
@@ -27,12 +30,14 @@ export default function Nutrition() {
   async function loadData() {
     setLoading(true)
     try {
-      const [today, recent] = await Promise.all([
+      const [today, recent, saved] = await Promise.all([
         getTodaysNutrition(),
         getRecentNutrition(30),
+        dbRead('saved_meals', {}, { order: 'use_count', limit: 20 }),
       ])
       setTodayMeals(today || [])
-      // Group recent by date
+      setSavedMeals(saved || [])
+
       const grouped = {}
       ;(recent || []).forEach(m => {
         if (!grouped[m.date]) grouped[m.date] = []
@@ -53,12 +58,40 @@ export default function Nutrition() {
     setLoading(false)
   }
 
+  async function handleQuickAdd(savedMeal) {
+    const today = new Date().toISOString().split('T')[0]
+    try {
+      await logNutrition({
+        date: today,
+        meal: savedMeal.meal_type || 'snack',
+        description: savedMeal.name,
+        calories: savedMeal.calories,
+        protein_g: savedMeal.protein_g,
+        carbs_g: savedMeal.carbs_g,
+        fat_g: savedMeal.fat_g,
+      })
+
+      // Bump use count
+      if (savedMeal.id) {
+        await dbWrite('saved_meals', 'update', {
+          use_count: (savedMeal.use_count || 0) + 1,
+        }, { id: savedMeal.id })
+      }
+
+      showToast(`${savedMeal.name} logged`)
+      await loadData()
+    } catch (err) {
+      console.error('Quick add error:', err)
+      showToast('Failed to log')
+    }
+  }
+
   async function handleSave() {
     if (!desc.trim()) return
     setSaving(true)
     try {
       await logNutrition({
-        date: selectedDate.toISOString().split('T')[0],
+        date: new Date().toISOString().split('T')[0],
         meal: meal.toLowerCase(),
         description: desc,
         calories: calories || null,
@@ -66,13 +99,34 @@ export default function Nutrition() {
         carbs_g: carbs || null,
         fat_g: fat || null,
       })
+
+      // Save as quick meal if toggled
+      if (showSaveToggle && saveName.trim()) {
+        await dbWrite('saved_meals', 'insert', {
+          name: saveName.trim(),
+          meal_type: meal.toLowerCase(),
+          description: desc,
+          calories: parseInt(calories) || null,
+          protein_g: parseInt(protein) || null,
+          carbs_g: parseInt(carbs) || null,
+          fat_g: parseInt(fat) || null,
+          use_count: 1,
+        })
+      }
+
       setDesc(''); setCalories(''); setProtein(''); setCarbs(''); setFat('')
+      setSaveName(''); setShowSaveToggle(false)
       setShowAdd(false)
       await loadData()
     } catch (err) {
       console.error('Save error:', err)
     }
     setSaving(false)
+  }
+
+  function showToast(msg) {
+    setQuickToast(msg)
+    setTimeout(() => setQuickToast(null), 2000)
   }
 
   // Today's totals
@@ -93,6 +147,13 @@ export default function Nutrition() {
     <Shell title="Nutrition">
       <div style={s.page}>
 
+        {/* Quick toast */}
+        {quickToast && (
+          <div style={s.toast} className="animate-fadeIn">
+            <span className="mono">{quickToast}</span>
+          </div>
+        )}
+
         {/* Today's summary */}
         <div style={s.section}>
           <div className="section-label" style={s.sLabel}>Today</div>
@@ -110,7 +171,7 @@ export default function Nutrition() {
                 <div style={{ ...s.macroValue, color: 'var(--teal)' }} className="mono">{todayCarbs || '--'}</div>
                 <div style={s.macroLabel} className="mono">Carbs</div>
               </div>
-              <div style={s.macroItem}>
+              <div style={{ ...s.macroItem, borderRight: 'none' }}>
                 <div style={{ ...s.macroValue, color: '#a78bfa' }} className="mono">{todayFat || '--'}</div>
                 <div style={s.macroLabel} className="mono">Fat</div>
               </div>
@@ -118,6 +179,42 @@ export default function Nutrition() {
             <div style={s.mealCount} className="mono">{todayMeals.length} meal{todayMeals.length !== 1 ? 's' : ''} logged</div>
           </div>
         </div>
+
+        {/* Quick add */}
+        {savedMeals.length > 0 && (
+          <div style={s.section}>
+            <div className="section-label" style={s.sLabel}>Quick add</div>
+            <div style={s.quickGrid}>
+              {savedMeals.map((sm) => (
+                <div
+                  key={sm.id}
+                  className="card-sm"
+                  style={s.quickCard}
+                  onClick={() => handleQuickAdd(sm)}
+                >
+                  <div style={s.quickTop}>
+                    <div style={s.quickName}>{sm.name}</div>
+                    <div style={s.quickType} className="mono">{(sm.meal_type || 'snack').toUpperCase()}</div>
+                  </div>
+                  <div style={s.quickMacros}>
+                    <span className="mono" style={s.quickMacro}>
+                      <span style={{ color: 'var(--orange)' }}>{sm.calories || '--'}</span> cal
+                    </span>
+                    <span className="mono" style={s.quickMacro}>
+                      <span style={{ color: 'var(--cyan)' }}>{sm.protein_g || '--'}</span>g P
+                    </span>
+                    <span className="mono" style={s.quickMacro}>
+                      <span style={{ color: 'var(--teal)' }}>{sm.carbs_g || '--'}</span>g C
+                    </span>
+                    <span className="mono" style={s.quickMacro}>
+                      <span style={{ color: '#a78bfa' }}>{sm.fat_g || '--'}</span>g F
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Today's meals */}
         <div style={s.section}>
@@ -129,7 +226,7 @@ export default function Nutrition() {
           {todayMeals.length === 0 ? (
             <div className="card" style={s.emptyCard}>
               <div className="mono" style={s.emptyText}>No meals logged today</div>
-              <div style={s.emptyHint}>Use the chat or tap "+ Add meal" above</div>
+              <div style={s.emptyHint}>Tap a quick meal above or use "+ Add meal"</div>
             </div>
           ) : (
             <div style={s.mealList}>
@@ -221,6 +318,32 @@ export default function Nutrition() {
                   </div>
                 </div>
 
+                {/* Save as quick meal toggle */}
+                <div
+                  style={s.saveToggleRow}
+                  onClick={() => {
+                    setShowSaveToggle(!showSaveToggle)
+                    if (!showSaveToggle && !saveName) setSaveName(desc)
+                  }}
+                >
+                  <div style={{
+                    ...s.toggleBox,
+                    ...(showSaveToggle ? s.toggleBoxOn : {}),
+                  }}>
+                    {showSaveToggle && <span style={s.toggleCheck}>✓</span>}
+                  </div>
+                  <span style={s.saveToggleLabel}>Save as quick meal</span>
+                </div>
+
+                {showSaveToggle && (
+                  <input
+                    style={s.input}
+                    placeholder="Quick meal name (e.g. Chicken & Rice)"
+                    value={saveName}
+                    onChange={e => setSaveName(e.target.value)}
+                  />
+                )}
+
                 <div className="mono" style={s.formHint}>
                   Leave macros blank and NOMIS will estimate from the description
                 </div>
@@ -245,6 +368,15 @@ const s = {
   sLabel: { padding: '0 24px', marginBottom: '10px' },
   sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 24px', marginBottom: '10px' },
 
+  // Toast
+  toast: {
+    position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)',
+    zIndex: 300, background: 'rgba(45,212,191,0.1)', border: '1px solid var(--teal-border)',
+    borderRadius: '12px', padding: '10px 20px',
+    fontSize: '0.6rem', color: 'var(--teal)', letterSpacing: '0.06em',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+  },
+
   // Macro card
   macroCard: { margin: '0 24px', overflow: 'hidden' },
   macroRow: { display: 'flex', padding: '4px 0' },
@@ -252,6 +384,18 @@ const s = {
   macroValue: { fontSize: '1.1rem', fontWeight: '600', lineHeight: 1, marginBottom: '6px' },
   macroLabel: { fontSize: '0.42rem', color: 'var(--text3)', letterSpacing: '0.1em', textTransform: 'uppercase' },
   mealCount: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.06em', textAlign: 'center', padding: '8px 0 14px', borderTop: '1px solid var(--border)' },
+
+  // Quick add
+  quickGrid: { display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '0 24px' },
+  quickCard: {
+    padding: '12px 14px', cursor: 'pointer', transition: 'all 0.15s',
+    flex: '0 0 calc(50% - 4px)', minWidth: '140px',
+  },
+  quickTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' },
+  quickName: { fontSize: '0.85rem', fontWeight: '600', color: 'var(--text)' },
+  quickType: { fontSize: '0.4rem', color: 'var(--text3)', letterSpacing: '0.1em', flexShrink: 0, marginLeft: '8px' },
+  quickMacros: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
+  quickMacro: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.03em' },
 
   // Add button
   addBtn: {
@@ -333,6 +477,26 @@ const s = {
     color: 'var(--text)', fontSize: '0.82rem', textAlign: 'center', outline: 'none',
     fontFamily: 'var(--font-mono)',
   },
+
+  // Save toggle
+  saveToggleRow: {
+    display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer',
+    padding: '4px 0',
+  },
+  toggleBox: {
+    width: '20px', height: '20px', borderRadius: '6px',
+    border: '1.5px solid var(--border3)', background: 'transparent',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'all 0.15s', flexShrink: 0,
+  },
+  toggleBoxOn: {
+    background: 'var(--orange-dim)', borderColor: 'var(--orange-border)',
+  },
+  toggleCheck: { fontSize: '0.6rem', color: 'var(--orange)', fontWeight: '700' },
+  saveToggleLabel: {
+    fontSize: '0.78rem', color: 'var(--text2)', fontWeight: '500',
+  },
+
   formHint: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.04em', textAlign: 'center', opacity: 0.7 },
   saveBtn: {
     width: '100%', padding: '15px', borderRadius: '12px',
