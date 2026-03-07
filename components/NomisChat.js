@@ -22,7 +22,6 @@ async function executeAction(parsed_data) {
         })
 
       case 'log_sets': {
-        // First create the session
         const session = await dbWrite('workout_sessions', 'insert', {
           date:         data.date || new Date().toISOString().split('T')[0],
           muscle_group: data.muscle_group,
@@ -32,7 +31,6 @@ async function executeAction(parsed_data) {
         const sessionId = session?.data?.[0]?.id
         if (!sessionId || !data.exercises) return session
 
-        // Then log each exercise and its sets
         for (const ex of data.exercises) {
           const exRow = await dbWrite('workout_exercises', 'insert', {
             session_id:   sessionId,
@@ -110,7 +108,6 @@ async function executeAction(parsed_data) {
 
       case 'suggest_exercises':
       case 'exercise_info':
-        // These don't write to DB — they're handled by rendering in the chat
         return { success: true, display_only: true, exercises: data.exercises || data }
 
       default:
@@ -129,15 +126,15 @@ function ActionCard({ action, data, result }) {
   const isDisplay = result?.display_only
 
   const labels = {
-    log_workout:       { icon: '💪', label: 'Workout logged' },
-    log_sets:          { icon: '💪', label: 'Sets logged' },
-    log_cardio:        { icon: '♡',  label: 'Cardio logged' },
-    log_sleep:         { icon: '◎',  label: 'Sleep logged' },
-    log_nutrition:     { icon: '🥗', label: 'Meal logged' },
-    log_body_stats:    { icon: '◉',  label: 'Body stats logged' },
-    log_peptide_cycle: { icon: '💉', label: 'Peptide cycle logged' },
+    log_workout:       { icon: '◆', label: 'Workout logged' },
+    log_sets:          { icon: '◆', label: 'Sets logged' },
+    log_cardio:        { icon: '♡', label: 'Cardio logged' },
+    log_sleep:         { icon: '◎', label: 'Sleep logged' },
+    log_nutrition:     { icon: '◉', label: 'Meal logged' },
+    log_body_stats:    { icon: '◉', label: 'Body stats logged' },
+    log_peptide_cycle: { icon: '◇', label: 'Peptide cycle logged' },
     suggest_exercises: { icon: '⚡', label: 'Exercise suggestions' },
-    exercise_info:     { icon: '📋', label: 'Exercise info' },
+    exercise_info:     { icon: '▸', label: 'Exercise info' },
   }
 
   const meta = labels[action] || { icon: '✓', label: action }
@@ -162,7 +159,6 @@ function ActionCard({ action, data, result }) {
     )
   }
 
-  // Summary lines for logged data
   const summaryLines = []
   if (data) {
     if (data.date)           summaryLines.push(`Date: ${data.date}`)
@@ -180,10 +176,10 @@ function ActionCard({ action, data, result }) {
   }
 
   return (
-    <div style={{ ...ac.wrap, borderColor: isError ? 'rgba(239,68,68,0.2)' : 'rgba(34,212,138,0.2)', background: isError ? 'rgba(239,68,68,0.04)' : 'rgba(34,212,138,0.04)' }}>
+    <div style={{ ...ac.wrap, borderColor: isError ? 'rgba(248,113,113,0.2)' : 'var(--cyan-border)', background: isError ? 'var(--red-dim)' : 'var(--cyan-dim)' }}>
       <div style={ac.header}>
         <span style={ac.icon}>{isError ? '✗' : meta.icon}</span>
-        <span style={{ ...ac.label, color: isError ? 'var(--red)' : 'var(--green)' }}>
+        <span style={{ ...ac.label, color: isError ? 'var(--red)' : 'var(--teal)' }}>
           {isError ? `Failed to log — ${result.error}` : `✓ ${meta.label}`}
         </span>
       </div>
@@ -200,8 +196,8 @@ function ActionCard({ action, data, result }) {
 export default function NomisChat({ pageContext = '' }) {
   const [open, setOpen]         = useState(false)
   const [input, setInput]       = useState('')
-  const [messages, setMessages] = useState([]) // { role, content, action_card? }
-  const [history, setHistory]   = useState([]) // clean history for API
+  const [messages, setMessages] = useState([])
+  const [history, setHistory]   = useState([])
   const [loading, setLoading]   = useState(false)
   const [context, setContext]   = useState('')
   const [ctxLoaded, setCtxLoaded] = useState(false)
@@ -226,10 +222,8 @@ export default function NomisChat({ pageContext = '' }) {
     setInput('')
     setLoading(true)
 
-    // Add user message to display
     setMessages(prev => [...prev, { role: 'user', content: msg }])
 
-    // Build full message with context
     const fullMessage = [
       context,
       pageContext ? `Current page: ${pageContext}` : '',
@@ -240,14 +234,12 @@ export default function NomisChat({ pageContext = '' }) {
       const res = await chat(fullMessage, history)
 
       if (res.response) {
-        // Update clean history for next API call
         setHistory(prev => [
           ...prev,
           { role: 'user', content: msg },
           { role: 'assistant', content: res.response }
         ])
 
-        // Handle parsed_data action
         let actionCard = null
         if (res.parsed_data?.action) {
           const result = await executeAction(res.parsed_data)
@@ -284,7 +276,7 @@ export default function NomisChat({ pageContext = '' }) {
               <div style={s.panelOrb}>N</div>
               <div>
                 <div style={s.panelName}>NOMIS</div>
-                <div style={s.panelStatus}>
+                <div style={s.panelStatus} className="mono">
                   {ctxLoaded ? '● Context loaded · 30 days' : '○ Loading context...'}
                 </div>
               </div>
@@ -298,7 +290,7 @@ export default function NomisChat({ pageContext = '' }) {
               <div style={s.welcome}>
                 <div style={s.welcomeOrb}>N</div>
                 <div style={s.welcomeTitle}>Hey Simon.</div>
-                <div style={s.welcomeText}>
+                <div style={s.welcomeText} className="mono">
                   I know your last 30 days. Just talk to me — tell me what you ate, how you slept, what you lifted. I'll log it automatically.
                 </div>
                 <div style={s.examples}>
@@ -318,7 +310,7 @@ export default function NomisChat({ pageContext = '' }) {
 
             {messages.map((msg, i) => (
               <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '100%' }}>
-                {msg.role === 'assistant' && <div style={s.msgLabel}>NOMIS</div>}
+                {msg.role === 'assistant' && <div style={s.msgLabel} className="mono">NOMIS</div>}
                 <div style={msg.role === 'user' ? s.msgUser : s.msgNomis}>
                   {msg.content}
                 </div>
@@ -334,10 +326,10 @@ export default function NomisChat({ pageContext = '' }) {
 
             {loading && (
               <div style={{ alignSelf: 'flex-start', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <div style={s.msgLabel}>NOMIS</div>
+                <div style={s.msgLabel} className="mono">NOMIS</div>
                 <div style={s.typing}>
                   {[0,1,2].map(i => (
-                    <div key={i} style={{ ...s.dot, animationDelay: `${i * 0.15}s` }} className="animate-pulse" />
+                    <div key={i} style={{ ...s.dot, animationDelay: `${i * 0.15}s` }} />
                   ))}
                 </div>
               </div>
@@ -370,41 +362,163 @@ export default function NomisChat({ pageContext = '' }) {
 
 // ── Styles ───────────────────────────────────────────────────────────────────
 const s = {
-  wrap: { position:'fixed', bottom:'calc(var(--nav-h, 64px) + 16px)', right:'16px', zIndex:200, display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'10px' },
-  orb: { width:'52px', height:'52px', borderRadius:'16px', background:'radial-gradient(circle at 35% 35%, rgba(34,212,138,0.45), rgba(34,212,138,0.06))', border:'1px solid rgba(34,212,138,0.4)', color:'var(--green)', fontFamily:'var(--font-display)', fontSize:'1.2rem', fontWeight:'700', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', letterSpacing:'0.05em', transition:'box-shadow 0.2s', boxShadow:'0 4px 20px rgba(34,212,138,0.15)' },
-  panel: { width:'360px', height:'520px', background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:'18px', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.5)' },
-  panelHeader: { display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 16px', borderBottom:'1px solid var(--border)', flexShrink:0 },
-  panelTitle: { display:'flex', alignItems:'center', gap:'10px' },
-  panelOrb: { width:'32px', height:'32px', borderRadius:'10px', background:'radial-gradient(circle at 35% 35%, rgba(34,212,138,0.4), rgba(34,212,138,0.05))', border:'1px solid rgba(34,212,138,0.35)', color:'var(--green)', fontFamily:'var(--font-display)', fontSize:'0.85rem', fontWeight:'700', display:'flex', alignItems:'center', justifyContent:'center' },
-  panelName: { fontFamily:'var(--font-display)', fontSize:'0.9rem', fontWeight:'700', color:'#fff', letterSpacing:'0.1em' },
-  panelStatus: { fontFamily:'var(--font-mono)', fontSize:'0.44rem', color:'var(--green)', letterSpacing:'0.1em', opacity:0.8 },
-  closeBtn: { background:'transparent', border:'none', color:'var(--text3)', fontSize:'0.85rem', cursor:'pointer', padding:'4px 6px' },
-  messages: { flex:1, overflowY:'auto', padding:'16px', display:'flex', flexDirection:'column', gap:'12px' },
-  welcome: { display:'flex', flexDirection:'column', alignItems:'center', gap:'10px', textAlign:'center', padding:'12px 4px' },
-  welcomeOrb: { width:'48px', height:'48px', borderRadius:'15px', background:'radial-gradient(circle at 35% 35%, rgba(34,212,138,0.4), rgba(34,212,138,0.05))', border:'1px solid rgba(34,212,138,0.3)', color:'var(--green)', fontFamily:'var(--font-display)', fontSize:'1.3rem', fontWeight:'700', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:'4px' },
-  welcomeTitle: { fontFamily:'var(--font-display)', fontSize:'1.1rem', fontWeight:'600', color:'#fff', letterSpacing:'0.05em' },
-  welcomeText: { fontFamily:'var(--font-mono)', fontSize:'0.58rem', color:'var(--text3)', lineHeight:'1.7', letterSpacing:'0.03em' },
-  examples: { display:'flex', flexDirection:'column', gap:'5px', width:'100%', marginTop:'4px' },
-  exampleChip: { padding:'8px 12px', background:'rgba(255,255,255,0.03)', border:'1px solid var(--border)', borderRadius:'8px', fontFamily:'var(--font-display)', fontSize:'0.75rem', color:'var(--text3)', cursor:'pointer', textAlign:'left', transition:'all 0.15s' },
-  msgLabel: { fontFamily:'var(--font-mono)', fontSize:'0.44rem', color:'var(--green)', letterSpacing:'0.15em', opacity:0.7 },
-  msgNomis: { background:'rgba(34,212,138,0.04)', border:'1px solid rgba(34,212,138,0.1)', borderRadius:'12px', borderTopLeftRadius:'3px', padding:'10px 14px', fontFamily:'var(--font-display)', fontSize:'0.85rem', color:'var(--text)', lineHeight:'1.6', alignSelf:'flex-start', maxWidth:'90%' },
-  msgUser: { alignSelf:'flex-end', maxWidth:'85%', background:'rgba(255,255,255,0.04)', border:'1px solid var(--border)', borderRadius:'12px', borderTopRightRadius:'3px', padding:'10px 14px', fontFamily:'var(--font-display)', fontSize:'0.85rem', color:'var(--text2)', lineHeight:'1.5' },
-  typing: { background:'rgba(34,212,138,0.04)', border:'1px solid rgba(34,212,138,0.1)', borderRadius:'12px', borderTopLeftRadius:'3px', padding:'12px 16px', display:'flex', gap:'4px', alignItems:'center' },
-  dot: { width:'6px', height:'6px', borderRadius:'50%', background:'var(--green)', opacity:0.6 },
-  inputRow: { display:'flex', gap:'8px', padding:'12px 14px 14px', borderTop:'1px solid var(--border)', flexShrink:0 },
-  chatInput: { flex:1, background:'rgba(255,255,255,0.03)', border:'1px solid var(--border2)', borderRadius:'10px', padding:'11px 14px', color:'var(--text)', fontFamily:'var(--font-display)', fontSize:'0.88rem', outline:'none', transition:'border-color 0.15s' },
-  sendBtn: { width:'40px', height:'40px', borderRadius:'10px', background:'var(--green-dim)', border:'1px solid var(--green-glow)', color:'var(--green)', fontSize:'1.3rem', cursor:'pointer', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', transition:'background 0.15s', fontFamily:'var(--font-display)', fontWeight:'700' },
+  wrap: {
+    position: 'fixed', bottom: '24px', right: '16px', zIndex: 200,
+    display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '10px',
+  },
+  orb: {
+    width: '52px', height: '52px', borderRadius: '16px',
+    background: 'linear-gradient(135deg, rgba(34,211,238,0.15), rgba(45,212,191,0.08))',
+    border: '1px solid var(--cyan-border)',
+    color: 'var(--cyan)', fontFamily: 'var(--font-body)',
+    fontSize: '1.2rem', fontWeight: '700', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    letterSpacing: '0.05em', transition: 'box-shadow 0.2s',
+    boxShadow: '0 4px 20px rgba(34,211,238,0.12)',
+  },
+  panel: {
+    width: '360px', height: '520px', background: 'var(--bg2)',
+    border: '1px solid var(--border)', borderRadius: '18px',
+    display: 'flex', flexDirection: 'column', overflow: 'hidden',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+  },
+  panelHeader: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '14px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0,
+  },
+  panelTitle: { display: 'flex', alignItems: 'center', gap: '10px' },
+  panelOrb: {
+    width: '32px', height: '32px', borderRadius: '10px',
+    background: 'linear-gradient(135deg, rgba(34,211,238,0.15), rgba(45,212,191,0.06))',
+    border: '1px solid var(--cyan-border)',
+    color: 'var(--cyan)', fontFamily: 'var(--font-body)',
+    fontSize: '0.85rem', fontWeight: '700',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  panelName: {
+    fontFamily: 'var(--font-body)', fontSize: '0.9rem', fontWeight: '700',
+    color: '#fff', letterSpacing: '-0.01em',
+  },
+  panelStatus: {
+    fontSize: '0.44rem', color: 'var(--teal)', letterSpacing: '0.1em', opacity: 0.8,
+  },
+  closeBtn: {
+    background: 'transparent', border: 'none', color: 'var(--text3)',
+    fontSize: '0.85rem', cursor: 'pointer', padding: '4px 6px',
+  },
+  messages: {
+    flex: 1, overflowY: 'auto', padding: '16px',
+    display: 'flex', flexDirection: 'column', gap: '12px',
+  },
+  welcome: {
+    display: 'flex', flexDirection: 'column', alignItems: 'center',
+    gap: '10px', textAlign: 'center', padding: '12px 4px',
+  },
+  welcomeOrb: {
+    width: '48px', height: '48px', borderRadius: '15px',
+    background: 'linear-gradient(135deg, rgba(34,211,238,0.15), rgba(45,212,191,0.06))',
+    border: '1px solid var(--cyan-border)',
+    color: 'var(--cyan)', fontFamily: 'var(--font-body)',
+    fontSize: '1.3rem', fontWeight: '700',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    marginBottom: '4px',
+  },
+  welcomeTitle: {
+    fontFamily: 'var(--font-body)', fontSize: '1.1rem', fontWeight: '600',
+    color: '#fff', letterSpacing: '-0.01em',
+  },
+  welcomeText: {
+    fontSize: '0.58rem', color: 'var(--text3)', lineHeight: '1.7', letterSpacing: '0.03em',
+  },
+  examples: {
+    display: 'flex', flexDirection: 'column', gap: '5px',
+    width: '100%', marginTop: '4px',
+  },
+  exampleChip: {
+    padding: '8px 12px', background: 'rgba(255,255,255,0.03)',
+    border: '1px solid var(--border)', borderRadius: '8px',
+    fontFamily: 'var(--font-body)', fontSize: '0.75rem',
+    color: 'var(--text3)', cursor: 'pointer', textAlign: 'left',
+    transition: 'all 0.15s',
+  },
+  msgLabel: {
+    fontSize: '0.44rem', color: 'var(--cyan)', letterSpacing: '0.15em', opacity: 0.7,
+  },
+  msgNomis: {
+    background: 'var(--cyan-dim)', border: '1px solid var(--cyan-border)',
+    borderRadius: '12px', borderTopLeftRadius: '3px',
+    padding: '10px 14px', fontFamily: 'var(--font-body)',
+    fontSize: '0.85rem', color: 'var(--text)', lineHeight: '1.6',
+    alignSelf: 'flex-start', maxWidth: '90%',
+  },
+  msgUser: {
+    alignSelf: 'flex-end', maxWidth: '85%',
+    background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)',
+    borderRadius: '12px', borderTopRightRadius: '3px',
+    padding: '10px 14px', fontFamily: 'var(--font-body)',
+    fontSize: '0.85rem', color: 'var(--text2)', lineHeight: '1.5',
+  },
+  typing: {
+    background: 'var(--cyan-dim)', border: '1px solid var(--cyan-border)',
+    borderRadius: '12px', borderTopLeftRadius: '3px',
+    padding: '12px 16px', display: 'flex', gap: '4px', alignItems: 'center',
+  },
+  dot: {
+    width: '6px', height: '6px', borderRadius: '50%',
+    background: 'var(--cyan)', opacity: 0.6,
+    animation: 'pulse 1s ease-in-out infinite',
+  },
+  inputRow: {
+    display: 'flex', gap: '8px', padding: '12px 14px 14px',
+    borderTop: '1px solid var(--border)', flexShrink: 0,
+  },
+  chatInput: {
+    flex: 1, background: 'rgba(255,255,255,0.03)',
+    border: '1px solid var(--border2)', borderRadius: '10px',
+    padding: '11px 14px', color: 'var(--text)',
+    fontFamily: 'var(--font-body)', fontSize: '0.88rem',
+    outline: 'none', transition: 'border-color 0.15s',
+  },
+  sendBtn: {
+    width: '40px', height: '40px', borderRadius: '10px',
+    background: 'var(--cyan-dim)', border: '1px solid var(--cyan-border)',
+    color: 'var(--cyan)', fontSize: '1.3rem', cursor: 'pointer',
+    flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'background 0.15s', fontFamily: 'var(--font-body)', fontWeight: '700',
+  },
 }
 
 const ac = {
-  wrap: { borderRadius:'10px', border:'1px solid rgba(34,212,138,0.2)', background:'rgba(34,212,138,0.04)', padding:'10px 12px', display:'flex', flexDirection:'column', gap:'6px', alignSelf:'flex-start', maxWidth:'90%' },
-  header: { display:'flex', alignItems:'center', gap:'7px' },
-  icon: { fontSize:'0.85rem' },
-  label: { fontFamily:'var(--font-mono)', fontSize:'0.52rem', color:'var(--green)', letterSpacing:'0.1em', fontWeight:'500' },
-  summary: { fontFamily:'var(--font-mono)', fontSize:'0.5rem', color:'var(--text3)', letterSpacing:'0.04em', lineHeight:1.5 },
-  exGrid: { display:'flex', flexDirection:'column', gap:'5px', marginTop:'2px' },
-  exCard: { background:'rgba(255,255,255,0.03)', borderRadius:'7px', padding:'8px 10px' },
-  exName: { fontFamily:'var(--font-display)', fontSize:'0.82rem', fontWeight:'600', color:'var(--text)', marginBottom:'2px' },
-  exMeta: { fontFamily:'var(--font-mono)', fontSize:'0.45rem', color:'var(--text3)', letterSpacing:'0.06em' },
-  exNote: { fontFamily:'var(--font-display)', fontSize:'0.72rem', color:'var(--text3)', marginTop:'3px', lineHeight:1.4 },
+  wrap: {
+    borderRadius: '10px', border: '1px solid var(--cyan-border)',
+    background: 'var(--cyan-dim)', padding: '10px 12px',
+    display: 'flex', flexDirection: 'column', gap: '6px',
+    alignSelf: 'flex-start', maxWidth: '90%',
+  },
+  header: { display: 'flex', alignItems: 'center', gap: '7px' },
+  icon: { fontSize: '0.85rem', color: 'var(--cyan)' },
+  label: {
+    fontFamily: 'var(--font-mono)', fontSize: '0.52rem',
+    color: 'var(--teal)', letterSpacing: '0.1em', fontWeight: '500',
+  },
+  summary: {
+    fontFamily: 'var(--font-mono)', fontSize: '0.5rem',
+    color: 'var(--text3)', letterSpacing: '0.04em', lineHeight: 1.5,
+  },
+  exGrid: { display: 'flex', flexDirection: 'column', gap: '5px', marginTop: '2px' },
+  exCard: {
+    background: 'rgba(255,255,255,0.03)', borderRadius: '7px', padding: '8px 10px',
+  },
+  exName: {
+    fontFamily: 'var(--font-body)', fontSize: '0.82rem', fontWeight: '600',
+    color: 'var(--text)', marginBottom: '2px',
+  },
+  exMeta: {
+    fontFamily: 'var(--font-mono)', fontSize: '0.45rem',
+    color: 'var(--text3)', letterSpacing: '0.06em',
+  },
+  exNote: {
+    fontFamily: 'var(--font-body)', fontSize: '0.72rem',
+    color: 'var(--text3)', marginTop: '3px', lineHeight: 1.4,
+  },
 }
