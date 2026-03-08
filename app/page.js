@@ -182,16 +182,16 @@ export default function Dashboard() {
   const sleepHrs = latestSleep ? parseFloat(latestSleep.duration_hrs || latestSleep.duration_hours) : null
   const sleepQuality = latestSleep?.quality || null
 
-  // Readiness
-  const readiness = calculateReadiness(sleepData, workouts, nutrition, bodyStats, suppPct)
-  const readinessInfo = getReadinessLabel(readiness)
-
   // Supplement compliance
   const suppTaken = supplements.filter(s =>
     suppLogs.some(l => String(l.supplement_id) === String(s.id) || l.name?.toLowerCase() === s.name?.toLowerCase())
   ).length
   const suppTotal = supplements.length
   const suppPct = suppTotal ? Math.round((suppTaken / suppTotal) * 100) : 0
+
+  // Readiness
+  const readiness = calculateReadiness(sleepData, workouts, nutrition, bodyStats, suppPct)
+  const readinessInfo = getReadinessLabel(readiness)
 
   // Weekly workout dots
   const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
