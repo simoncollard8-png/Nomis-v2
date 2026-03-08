@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { href: '/',          label: 'Home',       sub: 'Dashboard overview' },
   { href: '/train',     label: 'Train',      sub: 'Log workouts' },
   { href: '/nutrition', label: 'Nutrition',  sub: 'Meals and macros' },
+  { href: '/sleep',     label: 'Sleep',      sub: 'Sleep tracking' },
   { href: '/calendar',  label: 'Calendar',   sub: 'History and backfill' },
   { href: '/stats',     label: 'Stats',      sub: 'Charts and trends' },
   { href: '/settings',  label: 'Settings',   sub: 'Profile and config' },
@@ -17,12 +18,10 @@ export default function Shell({ children, title }) {
   const pathname = usePathname()
   const overlayRef = useRef(null)
 
-  // Close menu on route change
   useEffect(() => {
     setMenuOpen(false)
   }, [pathname])
 
-  // Close on escape
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') setMenuOpen(false) }
     window.addEventListener('keydown', handler)
@@ -137,8 +136,6 @@ const s = {
   content: {
     padding: '0 0 40px',
   },
-
-  // Overlay
   overlay: {
     position: 'fixed',
     inset: 0,
@@ -147,8 +144,6 @@ const s = {
     WebkitBackdropFilter: 'blur(4px)',
     zIndex: 998,
   },
-
-  // Slide-out menu
   menu: {
     position: 'fixed',
     top: 0,
