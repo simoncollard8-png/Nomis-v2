@@ -17,7 +17,21 @@ export default function Nutrition() {
   const [showSaveToggle, setShowSaveToggle] = useState(false)
   const [saveName, setSaveName]     = useState('')
 
-  // Form state
+  // Edit mode
+  const [editMode, setEditMode]       = useState(false)
+  const [editingMeal, setEditingMeal] = useState(null)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showNewQuick, setShowNewQuick] = useState(false)
+
+  // Edit form
+  const [editName, setEditName]       = useState('')
+  const [editType, setEditType]       = useState('snack')
+  const [editCal, setEditCal]         = useState('')
+  const [editProtein, setEditProtein] = useState('')
+  const [editCarbs, setEditCarbs]     = useState('')
+  const [editFat, setEditFat]         = useState('')
+
+  // Log form
   const [meal, setMeal]         = useState('Lunch')
   const [desc, setDesc]         = useState('')
   const [calories, setCalories] = useState('')
@@ -59,6 +73,7 @@ export default function Nutrition() {
   }
 
   async function handleQuickAdd(savedMeal) {
+    if (editMode) return
     const today = new Date().toISOString().split('T')[0]
     try {
       await logNutrition({
@@ -70,19 +85,87 @@ export default function Nutrition() {
         carbs_g: savedMeal.carbs_g,
         fat_g: savedMeal.fat_g,
       })
-
-      // Bump use count
       if (savedMeal.id) {
         await dbWrite('saved_meals', 'update', {
           use_count: (savedMeal.use_count || 0) + 1,
         }, { id: savedMeal.id })
       }
-
       showToast(`${savedMeal.name} logged`)
       await loadData()
     } catch (err) {
       console.error('Quick add error:', err)
       showToast('Failed to log')
+    }
+  }
+
+  function openEditMeal(sm) {
+    setEditingMeal(sm)
+    setEditName(sm.name || '')
+    setEditType(sm.meal_type || 'snack')
+    setEditCal(sm.calories?.toString() || '')
+    setEditProtein(sm.protein_g?.toString() || '')
+    setEditCarbs(sm.carbs_g?.toString() || '')
+    setEditFat(sm.fat_g?.toString() || '')
+    setShowEditModal(true)
+  }
+
+  function openNewQuick() {
+    setEditingMeal(null)
+    setEditName('')
+    setEditType('snack')
+    setEditCal('')
+    setEditProtein('')
+    setEditCarbs('')
+    setEditFat('')
+    setShowNewQuick(true)
+    setShowEditModal(true)
+  }
+
+  async function handleSaveEdit() {
+    if (!editName.trim()) return
+    setSaving(true)
+    try {
+      const data = {
+        name: editName.trim(),
+        meal_type: editType,
+        description: editName.trim(),
+        calories: parseInt(editCal) || null,
+        protein_g: parseInt(editProtein) || null,
+        carbs_g: parseInt(editCarbs) || null,
+        fat_g: parseInt(editFat) || null,
+      }
+
+      if (editingMeal?.id) {
+        await dbWrite('saved_meals', 'update', data, { id: editingMeal.id })
+        showToast('Meal updated')
+      } else {
+        data.use_count = 0
+        await dbWrite('saved_meals', 'insert', data)
+        showToast('Meal added')
+      }
+
+      setShowEditModal(false)
+      setShowNewQuick(false)
+      setEditingMeal(null)
+      await loadData()
+    } catch (err) {
+      console.error('Save edit error:', err)
+      showToast('Failed to save')
+    }
+    setSaving(false)
+  }
+
+  async function handleDeleteMeal(sm) {
+    if (!sm?.id) return
+    try {
+      await dbWrite('saved_meals', 'delete', {}, { id: sm.id })
+      showToast(`${sm.name} removed`)
+      setShowEditModal(false)
+      setEditingMeal(null)
+      await loadData()
+    } catch (err) {
+      console.error('Delete error:', err)
+      showToast('Failed to delete')
     }
   }
 
@@ -100,7 +183,6 @@ export default function Nutrition() {
         fat_g: fat || null,
       })
 
-      // Save as quick meal if toggled
       if (showSaveToggle && saveName.trim()) {
         await dbWrite('saved_meals', 'insert', {
           name: saveName.trim(),
@@ -129,7 +211,6 @@ export default function Nutrition() {
     setTimeout(() => setQuickToast(null), 2000)
   }
 
-  // Today's totals
   const todayCals = todayMeals.reduce((a, b) => a + (parseInt(b.calories) || 0), 0)
   const todayProtein = todayMeals.reduce((a, b) => a + (parseInt(b.protein_g) || 0), 0)
   const todayCarbs = todayMeals.reduce((a, b) => a + (parseInt(b.carbs_g) || 0), 0)
@@ -147,7 +228,6 @@ export default function Nutrition() {
     <Shell title="Nutrition">
       <div style={s.page}>
 
-        {/* Quick toast */}
         {quickToast && (
           <div style={s.toast} className="animate-fadeIn">
             <span className="mono">{quickToast}</span>
@@ -181,52 +261,70 @@ export default function Nutrition() {
         </div>
 
         {/* Quick add */}
-        {savedMeals.length > 0 && (
-          <div style={s.section}>
-            <div className="section-label" style={s.sLabel}>Quick add</div>
-            <div style={s.quickGrid}>
-              {savedMeals.map((sm) => (
-                <div
-                  key={sm.id}
-                  className="card-sm"
-                  style={s.quickCard}
-                  onClick={() => handleQuickAdd(sm)}
-                >
-                  <div style={s.quickTop}>
-                    <div style={s.quickName}>{sm.name}</div>
-                    <div style={s.quickType} className="mono">{(sm.meal_type || 'snack').toUpperCase()}</div>
-                  </div>
-                  <div style={s.quickMacros}>
-                    <span className="mono" style={s.quickMacro}>
-                      <span style={{ color: 'var(--orange)' }}>{sm.calories || '--'}</span> cal
-                    </span>
-                    <span className="mono" style={s.quickMacro}>
-                      <span style={{ color: 'var(--cyan)' }}>{sm.protein_g || '--'}</span>g P
-                    </span>
-                    <span className="mono" style={s.quickMacro}>
-                      <span style={{ color: 'var(--teal)' }}>{sm.carbs_g || '--'}</span>g C
-                    </span>
-                    <span className="mono" style={s.quickMacro}>
-                      <span style={{ color: '#a78bfa' }}>{sm.fat_g || '--'}</span>g F
-                    </span>
-                  </div>
-                </div>
-              ))}
+        <div style={s.section}>
+          <div style={s.sectionHeader}>
+            <span className="section-label">Quick add</span>
+            <div style={s.quickActions}>
+              <button
+                style={{ ...s.editToggle, ...(editMode ? s.editToggleOn : {}) }}
+                onClick={() => setEditMode(!editMode)}
+                className="mono"
+              >
+                {editMode ? 'Done' : 'Edit'}
+              </button>
             </div>
           </div>
-        )}
+          <div style={s.quickGrid}>
+            {savedMeals.map((sm) => (
+              <div
+                key={sm.id}
+                className="card-sm"
+                style={{ ...s.quickCard, ...(editMode ? s.quickCardEdit : {}) }}
+                onClick={() => editMode ? openEditMeal(sm) : handleQuickAdd(sm)}
+              >
+                {editMode && (
+                  <div style={s.editBadge} className="mono">tap to edit</div>
+                )}
+                <div style={s.quickTop}>
+                  <div style={s.quickName}>{sm.name}</div>
+                  <div style={s.quickType} className="mono">{(sm.meal_type || 'snack').toUpperCase()}</div>
+                </div>
+                <div style={s.quickMacros}>
+                  <span className="mono" style={s.quickMacro}>
+                    <span style={{ color: 'var(--orange)' }}>{sm.calories || '--'}</span> cal
+                  </span>
+                  <span className="mono" style={s.quickMacro}>
+                    <span style={{ color: 'var(--cyan)' }}>{sm.protein_g || '--'}</span>g P
+                  </span>
+                  <span className="mono" style={s.quickMacro}>
+                    <span style={{ color: 'var(--teal)' }}>{sm.carbs_g || '--'}</span>g C
+                  </span>
+                  <span className="mono" style={s.quickMacro}>
+                    <span style={{ color: '#a78bfa' }}>{sm.fat_g || '--'}</span>g F
+                  </span>
+                </div>
+              </div>
+            ))}
+
+            {/* Add new quick meal card */}
+            <div style={s.addQuickCard} onClick={openNewQuick}>
+              <span style={s.addQuickPlus}>+</span>
+              <span style={s.addQuickLabel}>Add quick meal</span>
+            </div>
+          </div>
+        </div>
 
         {/* Today's meals */}
         <div style={s.section}>
           <div style={s.sectionHeader}>
             <span className="section-label">Meals</span>
-            <button style={s.addBtn} onClick={() => setShowAdd(true)}>+ Add meal</button>
+            <button style={s.addBtn} onClick={() => setShowAdd(true)}>+ Log meal</button>
           </div>
 
           {todayMeals.length === 0 ? (
             <div className="card" style={s.emptyCard}>
               <div className="mono" style={s.emptyText}>No meals logged today</div>
-              <div style={s.emptyHint}>Tap a quick meal above or use "+ Add meal"</div>
+              <div style={s.emptyHint}>Tap a quick meal above or use "+ Log meal"</div>
             </div>
           ) : (
             <div style={s.mealList}>
@@ -274,7 +372,70 @@ export default function Nutrition() {
           </div>
         )}
 
-        {/* Add meal modal */}
+        {/* ── Edit / New Quick Meal Modal ── */}
+        {showEditModal && (
+          <div style={s.modalOverlay} onClick={(e) => { if (e.target === e.currentTarget) { setShowEditModal(false); setShowNewQuick(false); setEditingMeal(null) } }}>
+            <div style={s.modal} className="animate-fadeIn">
+              <div style={s.modalHeader}>
+                <span style={s.modalTitle}>{editingMeal ? 'Edit Quick Meal' : 'New Quick Meal'}</span>
+                <button style={s.modalClose} onClick={() => { setShowEditModal(false); setShowNewQuick(false); setEditingMeal(null) }}>
+                  <span style={{ position: 'absolute', width: '14px', height: '1.5px', background: 'var(--text3)', transform: 'rotate(45deg)' }} />
+                  <span style={{ position: 'absolute', width: '14px', height: '1.5px', background: 'var(--text3)', transform: 'rotate(-45deg)' }} />
+                </button>
+              </div>
+
+              <div style={s.formBody}>
+                <div style={s.formLabel} className="mono">Name</div>
+                <input style={s.input} placeholder="e.g. Chicken & Rice" value={editName} onChange={e => setEditName(e.target.value)} />
+
+                <div style={s.formLabel} className="mono">Meal type</div>
+                <div style={s.typeRow}>
+                  {MEAL_TYPES.map(t => (
+                    <button key={t} style={{
+                      ...s.typeBtn,
+                      ...(editType === t.toLowerCase() ? s.typeBtnActive : {}),
+                    }} onClick={() => setEditType(t.toLowerCase())}>{t}</button>
+                  ))}
+                </div>
+
+                <div style={s.macroInputs}>
+                  <div style={s.macroInputWrap}>
+                    <label style={s.inputLabel} className="mono">Calories</label>
+                    <input style={s.inputSm} className="mono" type="number" inputMode="numeric" placeholder="--" value={editCal} onChange={e => setEditCal(e.target.value)} />
+                  </div>
+                  <div style={s.macroInputWrap}>
+                    <label style={s.inputLabel} className="mono">Protein</label>
+                    <input style={s.inputSm} className="mono" type="number" inputMode="numeric" placeholder="--" value={editProtein} onChange={e => setEditProtein(e.target.value)} />
+                  </div>
+                  <div style={s.macroInputWrap}>
+                    <label style={s.inputLabel} className="mono">Carbs</label>
+                    <input style={s.inputSm} className="mono" type="number" inputMode="numeric" placeholder="--" value={editCarbs} onChange={e => setEditCarbs(e.target.value)} />
+                  </div>
+                  <div style={s.macroInputWrap}>
+                    <label style={s.inputLabel} className="mono">Fat</label>
+                    <input style={s.inputSm} className="mono" type="number" inputMode="numeric" placeholder="--" value={editFat} onChange={e => setEditFat(e.target.value)} />
+                  </div>
+                </div>
+
+                <button
+                  style={{ ...s.saveBtn, opacity: saving || !editName.trim() ? 0.4 : 1 }}
+                  onClick={handleSaveEdit}
+                  disabled={saving || !editName.trim()}
+                >
+                  {saving ? 'Saving...' : editingMeal ? 'Save changes' : 'Add quick meal'}
+                </button>
+
+                {editingMeal && (
+                  <button style={s.deleteBtn} onClick={() => handleDeleteMeal(editingMeal)}>
+                    Delete this meal
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Log Meal Modal ── */}
         {showAdd && (
           <div style={s.modalOverlay} onClick={(e) => { if (e.target === e.currentTarget) setShowAdd(false) }}>
             <div style={s.modal} className="animate-fadeIn">
@@ -286,7 +447,6 @@ export default function Nutrition() {
                 </button>
               </div>
 
-              {/* Meal type selector */}
               <div style={s.typeRow}>
                 {MEAL_TYPES.map(t => (
                   <button key={t} style={{
@@ -318,7 +478,6 @@ export default function Nutrition() {
                   </div>
                 </div>
 
-                {/* Save as quick meal toggle */}
                 <div
                   style={s.saveToggleRow}
                   onClick={() => {
@@ -368,7 +527,6 @@ const s = {
   sLabel: { padding: '0 24px', marginBottom: '10px' },
   sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 24px', marginBottom: '10px' },
 
-  // Toast
   toast: {
     position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)',
     zIndex: 300, background: 'rgba(45,212,191,0.1)', border: '1px solid var(--teal-border)',
@@ -377,7 +535,6 @@ const s = {
     boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
   },
 
-  // Macro card
   macroCard: { margin: '0 24px', overflow: 'hidden' },
   macroRow: { display: 'flex', padding: '4px 0' },
   macroItem: { flex: 1, padding: '18px 0', textAlign: 'center', borderRight: '1px solid var(--border)' },
@@ -385,11 +542,24 @@ const s = {
   macroLabel: { fontSize: '0.42rem', color: 'var(--text3)', letterSpacing: '0.1em', textTransform: 'uppercase' },
   mealCount: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.06em', textAlign: 'center', padding: '8px 0 14px', borderTop: '1px solid var(--border)' },
 
-  // Quick add
+  quickActions: { display: 'flex', gap: '8px', alignItems: 'center' },
+  editToggle: {
+    padding: '5px 12px', borderRadius: '6px', border: '1px solid var(--border)',
+    background: 'transparent', color: 'var(--text3)', fontSize: '0.5rem',
+    letterSpacing: '0.06em', cursor: 'pointer', transition: 'all 0.15s',
+  },
+  editToggleOn: {
+    background: 'var(--cyan-dim)', borderColor: 'var(--cyan-border)', color: 'var(--cyan)',
+  },
   quickGrid: { display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '0 24px' },
   quickCard: {
     padding: '12px 14px', cursor: 'pointer', transition: 'all 0.15s',
     flex: '0 0 calc(50% - 4px)', minWidth: '140px',
+  },
+  quickCardEdit: { borderColor: 'var(--cyan-border)', borderStyle: 'dashed' },
+  editBadge: {
+    fontSize: '0.4rem', color: 'var(--cyan)', letterSpacing: '0.08em',
+    marginBottom: '6px', textTransform: 'uppercase',
   },
   quickTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' },
   quickName: { fontSize: '0.85rem', fontWeight: '600', color: 'var(--text)' },
@@ -397,7 +567,16 @@ const s = {
   quickMacros: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
   quickMacro: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.03em' },
 
-  // Add button
+  addQuickCard: {
+    flex: '0 0 calc(50% - 4px)', minWidth: '140px',
+    border: '1.5px dashed var(--border2)', borderRadius: 'var(--radius-md)',
+    padding: '12px 14px', display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center', gap: '4px',
+    cursor: 'pointer', transition: 'all 0.15s', minHeight: '80px',
+  },
+  addQuickPlus: { fontSize: '1.1rem', color: 'var(--text3)', fontWeight: '300', lineHeight: 1 },
+  addQuickLabel: { fontSize: '0.65rem', color: 'var(--text3)' },
+
   addBtn: {
     padding: '6px 14px', borderRadius: '8px', border: '1px solid var(--orange-border)',
     background: 'var(--orange-dim)', color: 'var(--orange)',
@@ -405,12 +584,10 @@ const s = {
     cursor: 'pointer',
   },
 
-  // Empty
   emptyCard: { margin: '0 24px', padding: '32px 20px', textAlign: 'center' },
   emptyText: { fontSize: '0.6rem', color: 'var(--text3)', letterSpacing: '0.06em', marginBottom: '6px' },
   emptyHint: { fontSize: '0.72rem', color: 'var(--text3)', opacity: 0.6 },
 
-  // Meal cards
   mealList: { display: 'flex', flexDirection: 'column', gap: '8px', padding: '0 24px' },
   mealCard: { padding: '14px 16px' },
   mealTop: { marginBottom: '10px' },
@@ -419,7 +596,6 @@ const s = {
   mealMacros: { display: 'flex', gap: '16px' },
   mealMacro: { fontSize: '0.52rem', color: 'var(--text3)', letterSpacing: '0.04em' },
 
-  // Recent
   recentCard: { margin: '0 24px', overflow: 'hidden' },
   recentRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px' },
   recentDate: { fontSize: '0.85rem', fontWeight: '500', color: 'var(--text)' },
@@ -427,7 +603,6 @@ const s = {
   recentMacros: { display: 'flex', gap: '14px', alignItems: 'center' },
   recentVal: { fontSize: '0.6rem', fontWeight: '500', letterSpacing: '0.02em' },
 
-  // Modal
   modalOverlay: {
     position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
     backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
@@ -448,7 +623,6 @@ const s = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
 
-  // Type selector
   typeRow: { display: 'flex', gap: '6px', padding: '0 20px 16px' },
   typeBtn: {
     flex: 1, padding: '10px 0', borderRadius: '8px', border: '1px solid var(--border)',
@@ -460,8 +634,11 @@ const s = {
     background: 'var(--orange-dim)', borderColor: 'var(--orange-border)', color: 'var(--orange)',
   },
 
-  // Form
   formBody: { padding: '0 20px 24px', display: 'flex', flexDirection: 'column', gap: '12px' },
+  formLabel: {
+    fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.1em',
+    textTransform: 'uppercase', marginBottom: '-4px',
+  },
   input: {
     width: '100%', padding: '14px 16px', borderRadius: '10px',
     border: '1px solid var(--border2)', background: 'var(--bg3)',
@@ -478,10 +655,8 @@ const s = {
     fontFamily: 'var(--font-mono)',
   },
 
-  // Save toggle
   saveToggleRow: {
-    display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer',
-    padding: '4px 0',
+    display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '4px 0',
   },
   toggleBox: {
     width: '20px', height: '20px', borderRadius: '6px',
@@ -489,13 +664,9 @@ const s = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     transition: 'all 0.15s', flexShrink: 0,
   },
-  toggleBoxOn: {
-    background: 'var(--orange-dim)', borderColor: 'var(--orange-border)',
-  },
+  toggleBoxOn: { background: 'var(--orange-dim)', borderColor: 'var(--orange-border)' },
   toggleCheck: { fontSize: '0.6rem', color: 'var(--orange)', fontWeight: '700' },
-  saveToggleLabel: {
-    fontSize: '0.78rem', color: 'var(--text2)', fontWeight: '500',
-  },
+  saveToggleLabel: { fontSize: '0.78rem', color: 'var(--text2)', fontWeight: '500' },
 
   formHint: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.04em', textAlign: 'center', opacity: 0.7 },
   saveBtn: {
@@ -504,5 +675,13 @@ const s = {
     background: 'linear-gradient(135deg, rgba(251,146,60,0.10), rgba(251,146,60,0.04))',
     color: 'var(--orange)', fontFamily: 'var(--font-body)',
     fontSize: '0.88rem', fontWeight: '600', cursor: 'pointer',
+  },
+  deleteBtn: {
+    width: '100%', padding: '13px', borderRadius: '12px',
+    border: '1px solid rgba(248,113,113,0.2)',
+    background: 'rgba(248,113,113,0.04)',
+    color: 'var(--red)', fontFamily: 'var(--font-mono)',
+    fontSize: '0.6rem', fontWeight: '500', cursor: 'pointer',
+    letterSpacing: '0.04em',
   },
 }
