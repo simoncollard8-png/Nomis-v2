@@ -44,58 +44,66 @@ function getDailyQuote() {
 }
 
 // ── Readiness Score Calculator ──────────────────────────────────────────────
-function calculateReadiness(sleepData, workouts, nutrition, bodyStats) {
-  let score = 50 // Base
+function calculateReadiness(sleepData, workouts, nutrition, bodyStats, suppPct = 0) {
+  let score = 25 // Base
 
-  // Sleep (up to +25)
+  // Sleep (up to +30)
   if (sleepData.length) {
     const lastSleep = parseFloat(sleepData[0]?.duration_hrs || sleepData[0]?.duration_hours) || 0
     if (lastSleep >= 8) score += 25
     else if (lastSleep >= 7) score += 20
     else if (lastSleep >= 6) score += 12
-    else if (lastSleep >= 5) score += 5
-    else score -= 5
+    else if (lastSleep >= 5) score += 6
+    // Under 5: +0
 
     const quality = sleepData[0]?.quality
     if (quality === 'great') score += 5
     else if (quality === 'good') score += 3
+    else if (quality === 'okay') score += 1
     else if (quality === 'poor') score -= 3
-    else if (quality === 'bad') score -= 8
-  } else {
-    score -= 10 // No sleep data penalty
+    else if (quality === 'bad') score -= 5
   }
+  // No sleep data: +0 (base only)
 
-  // Recovery (up to +15) — check days since last workout
+  // Recovery (up to +20)
   if (workouts.length) {
     const today = new Date()
     const lastWorkoutDate = new Date(workouts[0]?.date)
     const daysSince = Math.floor((today - lastWorkoutDate) / 86400000)
 
-    if (daysSince === 0) score += 5 // Trained today, moderate
-    else if (daysSince === 1) score += 15 // 1 day rest, ideal
-    else if (daysSince === 2) score += 12 // 2 days, good recovery
-    else if (daysSince >= 3) score += 8 // Well rested but losing momentum
+    if (daysSince === 1) score += 20 // 1 day rest, ideal
+    else if (daysSince === 2) score += 17 // 2 days, good recovery
+    else if (daysSince === 0) score += 10 // Trained today
+    else if (daysSince >= 3) score += 12 // Well rested but losing momentum
 
-    // Check for overtraining — 5+ days in a row
+    // Overtraining check — 6+ days in last 7
     const last7 = workouts.filter(w => {
       const d = new Date(w.date)
       return (today - d) / 86400000 <= 7
     })
-    if (last7.length >= 6) score -= 10 // Overtraining risk
+    if (last7.length >= 6) score -= 10
   }
 
-  // Nutrition (up to +10)
+  // Nutrition (up to +15)
   if (nutrition.length) {
     const todayStr = new Date().toISOString().split('T')[0]
     const todayMeals = nutrition.filter(n => n.date === todayStr)
     const totalProtein = todayMeals.reduce((a, b) => a + (parseInt(b.protein_g) || 0), 0)
     const totalCals = todayMeals.reduce((a, b) => a + (parseInt(b.calories) || 0), 0)
 
-    if (totalProtein >= 150) score += 5
-    else if (totalProtein >= 100) score += 3
+    if (totalProtein >= 150) score += 8
+    else if (totalProtein >= 100) score += 5
+    else if (totalProtein > 0) score += 2
+
     if (totalCals >= 1800 && totalCals <= 2800) score += 5
     else if (totalCals > 0) score += 2
   }
+
+  // Stack compliance (up to +10)
+  if (suppPct >= 100) score += 10
+  else if (suppPct >= 75) score += 7
+  else if (suppPct >= 50) score += 4
+  else if (suppPct > 0) score += 1
 
   return Math.min(100, Math.max(0, score))
 }
@@ -175,7 +183,7 @@ export default function Dashboard() {
   const sleepQuality = latestSleep?.quality || null
 
   // Readiness
-  const readiness = calculateReadiness(sleepData, workouts, nutrition, bodyStats)
+  const readiness = calculateReadiness(sleepData, workouts, nutrition, bodyStats, suppPct)
   const readinessInfo = getReadinessLabel(readiness)
 
   // Supplement compliance
