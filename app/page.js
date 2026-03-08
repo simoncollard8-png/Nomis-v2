@@ -86,7 +86,7 @@ function calculateReadiness(sleepData, workouts, nutrition, bodyStats, suppPct =
 
   // Nutrition (up to +15)
   if (nutrition.length) {
-    const todayStr = new Date().toISOString().split('T')[0]
+    const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
     const todayMeals = nutrition.filter(n => n.date === todayStr)
     const totalProtein = todayMeals.reduce((a, b) => a + (parseInt(b.protein_g) || 0), 0)
     const totalCals = todayMeals.reduce((a, b) => a + (parseInt(b.calories) || 0), 0)
@@ -132,7 +132,10 @@ export default function Dashboard() {
   const [date, setDate] = useState('')
   const [greeting, setGreeting] = useState('')
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = (() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })()
 
   useEffect(() => {
     setMounted(true)
@@ -148,7 +151,7 @@ export default function Dashboard() {
 
     // Load saved water count from localStorage
     try {
-      const saved = localStorage.getItem(`nomis-water-${new Date().toISOString().split('T')[0]}`)
+      const saved = localStorage.getItem(`nomis-water-${(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()}`)
       if (saved) setWaterCount(parseInt(saved) || 0)
     } catch {}
 
@@ -160,7 +163,7 @@ export default function Dashboard() {
       getRecentNutrition(30).then(setNutrition).catch(() => {}),
       dbRead('user_schedule', {}, { order: 'id', limit: 7 }).then(setSchedule).catch(() => {}),
       dbRead('supplement_stack', {}, { order: 'name', limit: 50 }).then(d => setSupplements((d || []).filter(s => s.active !== false))).catch(() => {}),
-      dbRead('supplement_logs', { date: new Date().toISOString().split('T')[0] }, { limit: 50 }).then(setSuppLogs).catch(() => {}),
+      dbRead('supplement_logs', { date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })() }, { limit: 50 }).then(setSuppLogs).catch(() => {}),
     ])
 
     return () => clearInterval(id)
@@ -200,7 +203,7 @@ export default function Dashboard() {
   const weekDots = days.map((label, i) => {
     const d = new Date(weekStart)
     d.setDate(d.getDate() + i)
-    const dateStr = d.toISOString().split('T')[0]
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
     const worked = workouts.some(w => w.date === dateStr)
     const isToday = dateStr === today
     return { label, worked, isToday }
@@ -483,7 +486,7 @@ function calculateStreak(workouts) {
   for (let i = 0; i < dates.length; i++) {
     const expected = new Date(today)
     expected.setDate(expected.getDate() - i)
-    const expectedStr = expected.toISOString().split('T')[0]
+    const expectedStr = `${expected.getFullYear()}-${String(expected.getMonth()+1).padStart(2,'0')}-${String(expected.getDate()).padStart(2,'0')}`
     if (dates.includes(expectedStr)) streak++
     else break
   }
