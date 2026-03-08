@@ -1,4 +1,5 @@
 'use client'
+import { getLocalDate } from '../lib/date'
 import { useState, useEffect } from 'react'
 import Shell from '../../components/Shell'
 import NomisChat from '../../components/NomisChat'
@@ -231,7 +232,7 @@ export default function Calendar() {
   const month = currentMonth.getMonth()
   const firstDayOfWeek = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const todayStr = new Date().toISOString().split('T')[0]
+  const todayStr = getLocalDate()
   const cells = []
   for (let i = 0; i < firstDayOfWeek; i++) cells.push(null)
   for (let d = 1; d <= daysInMonth; d++) cells.push(d)

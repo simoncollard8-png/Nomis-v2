@@ -1,4 +1,5 @@
 'use client'
+import { getLocalDate } from '../lib/date'
 import { useState, useEffect, useRef } from 'react'
 import { chat, dbWrite } from '../lib/api'
 import { buildContext } from '../lib/context'
@@ -12,7 +13,7 @@ async function executeAction(parsed_data) {
     switch (action) {
       case 'log_workout':
         return await dbWrite('workout_sessions', 'insert', {
-          date: data.date || new Date().toISOString().split('T')[0],
+          date: data.date || getLocalDate(),
           muscle_group: data.muscle_group, title: data.title,
           description: data.description, feeling: data.feeling,
           duration_min: data.duration_min || null,

@@ -1,4 +1,5 @@
 'use client'
+import { getLocalDate } from '../lib/date'
 import { useState, useEffect } from 'react'
 import Shell from '../../components/Shell'
 import NomisChat from '../../components/NomisChat'
@@ -74,7 +75,7 @@ export default function Nutrition() {
 
   async function handleQuickAdd(savedMeal) {
     if (editMode) return
-    const today = new Date().toISOString().split('T')[0]
+    const today = getLocalDate()
     try {
       await logNutrition({
         date: today,

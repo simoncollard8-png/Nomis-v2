@@ -1,4 +1,5 @@
 'use client'
+import { getLocalDate } from '../lib/date'
 import { useState, useEffect } from 'react'
 import Shell from '../../components/Shell'
 import NomisChat from '../../components/NomisChat'
@@ -22,7 +23,7 @@ export default function Sleep() {
 
   // Form
   const [form, setForm] = useState({
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalDate(),
     duration: '',
     quality: 'good',
     bedtime: '',

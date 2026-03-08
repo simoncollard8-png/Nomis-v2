@@ -1,4 +1,5 @@
 'use client'
+import { getLocalDate } from '../lib/date'
 import { useState, useEffect, useCallback } from 'react'
 import Shell from '../../components/Shell'
 import NomisChat from '../../components/NomisChat'
@@ -24,7 +25,7 @@ export default function Stack() {
   const [aiLoading, setAiLoading]   = useState(false)
   const [selectedSupp, setSelectedSupp] = useState(null)
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = getLocalDate()
 
   const loadData = useCallback(async () => {
     setLoading(true)
