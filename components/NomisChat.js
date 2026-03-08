@@ -3,113 +3,92 @@ import { useState, useEffect, useRef } from 'react'
 import { chat, dbWrite } from '../lib/api'
 import { buildContext } from '../lib/context'
 
-// ── Action handlers — each parsed_data action maps to a DB write ────────────
+// ── Action handlers ─────────────────────────────────────────────────────────
 async function executeAction(parsed_data) {
   const { action, data } = parsed_data
   if (!action || !data) return null
 
   try {
     switch (action) {
-
       case 'log_workout':
         return await dbWrite('workout_sessions', 'insert', {
-          date:         data.date || new Date().toISOString().split('T')[0],
-          muscle_group: data.muscle_group,
-          title:        data.title,
-          description:  data.description,
-          feeling:      data.feeling,
+          date: data.date || new Date().toISOString().split('T')[0],
+          muscle_group: data.muscle_group, title: data.title,
+          description: data.description, feeling: data.feeling,
           duration_min: data.duration_min || null,
         })
-
       case 'log_sets': {
         const session = await dbWrite('workout_sessions', 'insert', {
-          date:         data.date || new Date().toISOString().split('T')[0],
+          date: data.date || new Date().toISOString().split('T')[0],
           muscle_group: data.muscle_group,
-          title:        data.title || `${data.muscle_group} Day`,
-          description:  data.description || '',
+          title: data.title || `${data.muscle_group} Day`,
+          description: data.description || '',
         })
         const sessionId = session?.data?.[0]?.id
         if (!sessionId || !data.exercises) return session
-
         for (const ex of data.exercises) {
           const exRow = await dbWrite('workout_exercises', 'insert', {
-            session_id:   sessionId,
-            name:         ex.name,
+            session_id: sessionId, name: ex.name,
             muscle_group: ex.muscle_group || data.muscle_group,
-            sets:         ex.sets?.length || 0,
+            sets: ex.sets?.length || 0,
           })
           const exId = exRow?.data?.[0]?.id
           if (!exId || !ex.sets) continue
-
           for (const set of ex.sets) {
             await dbWrite('workout_sets', 'insert', {
-              exercise_id:    exId,
-              session_id:     sessionId,
-              set_number:     set.set,
-              weight_lbs:     set.weight_lbs || null,
+              exercise_id: exId, session_id: sessionId,
+              set_number: set.set, weight_lbs: set.weight_lbs || null,
               reps_completed: set.reps || null,
             })
           }
         }
         return { success: true, sessionId }
       }
-
       case 'log_cardio':
         return await dbWrite('cardio_sessions', 'insert', {
-          date:            data.date || new Date().toISOString().split('T')[0],
-          activity:        data.activity || 'cardio',
-          duration_min:    data.duration_min || null,
-          distance_miles:  data.distance_miles || null,
-          pace_min_mile:   data.pace_min_mile || null,
-          avg_heart_rate:  data.avg_heart_rate || null,
-          max_heart_rate:  data.max_heart_rate || null,
+          date: data.date || new Date().toISOString().split('T')[0],
+          activity: data.activity || 'cardio',
+          duration_min: data.duration_min || null,
+          distance_miles: data.distance_miles || null,
+          pace_min_mile: data.pace_min_mile || null,
+          avg_heart_rate: data.avg_heart_rate || null,
+          max_heart_rate: data.max_heart_rate || null,
           calories_burned: data.calories_burned || null,
-          notes:           data.notes || '',
+          notes: data.notes || '',
         })
-
       case 'log_sleep':
         return await dbWrite('sleep_logs', 'insert', {
-          date:         data.date || new Date().toISOString().split('T')[0],
+          date: data.date || new Date().toISOString().split('T')[0],
           duration_hrs: data.duration_hours || null,
-          quality:      data.quality || null,
-          notes:        data.notes || '',
+          quality: data.quality || null, notes: data.notes || '',
         })
-
       case 'log_nutrition':
         return await dbWrite('nutrition', 'insert', {
-          date:       data.date || new Date().toISOString().split('T')[0],
-          meal:       data.meal || 'meal',
-          description: data.description || '',
-          calories:   data.calories || null,
-          protein_g:  data.protein_g || data.protein || null,
-          carbs_g:    data.carbs_g || null,
-          fat_g:      data.fat_g || null,
-          sodium_mg:  data.sodium_mg || null,
-          notes:      data.notes || '',
+          date: data.date || new Date().toISOString().split('T')[0],
+          meal: data.meal || 'meal', description: data.description || '',
+          calories: data.calories || null,
+          protein_g: data.protein_g || data.protein || null,
+          carbs_g: data.carbs_g || null, fat_g: data.fat_g || null,
+          sodium_mg: data.sodium_mg || null, notes: data.notes || '',
         })
-
       case 'log_body_stats':
         return await dbWrite('body_stats', 'insert', {
-          date:         data.date || new Date().toISOString().split('T')[0],
-          weight_lbs:   data.weight_lbs || null,
+          date: data.date || new Date().toISOString().split('T')[0],
+          weight_lbs: data.weight_lbs || null,
           body_fat_pct: data.body_fat_pct || null,
-          notes:        data.notes || '',
+          notes: data.notes || '',
         })
-
       case 'log_peptide_cycle':
         return await dbWrite('peptide_cycles', 'insert', {
-          stack_name:   data.stack_name,
-          start_date:   data.start_date || new Date().toISOString().split('T')[0],
-          cycle_days:   data.cycle_days || null,
+          stack_name: data.stack_name,
+          start_date: data.start_date || new Date().toISOString().split('T')[0],
+          cycle_days: data.cycle_days || null,
           dose_details: data.dose_details || '',
-          status:       data.status || 'active',
-          notes:        data.notes || '',
+          status: data.status || 'active', notes: data.notes || '',
         })
-
       case 'suggest_exercises':
       case 'exercise_info':
         return { success: true, display_only: true, exercises: data.exercises || data }
-
       default:
         console.warn('Unknown action:', action)
         return null
@@ -120,23 +99,22 @@ async function executeAction(parsed_data) {
   }
 }
 
-// ── Action confirmation card ─────────────────────────────────────────────────
+// ── Action Card ─────────────────────────────────────────────────────────────
 function ActionCard({ action, data, result }) {
-  const isError   = result && !result.success && !result.display_only
+  const isError = result && !result.success && !result.display_only
   const isDisplay = result?.display_only
 
   const labels = {
-    log_workout:       { icon: '◆', label: 'Workout logged' },
-    log_sets:          { icon: '◆', label: 'Sets logged' },
-    log_cardio:        { icon: '♡', label: 'Cardio logged' },
-    log_sleep:         { icon: '◎', label: 'Sleep logged' },
-    log_nutrition:     { icon: '◉', label: 'Meal logged' },
-    log_body_stats:    { icon: '◉', label: 'Body stats logged' },
+    log_workout: { icon: '◆', label: 'Workout logged' },
+    log_sets: { icon: '◆', label: 'Sets logged' },
+    log_cardio: { icon: '♡', label: 'Cardio logged' },
+    log_sleep: { icon: '◎', label: 'Sleep logged' },
+    log_nutrition: { icon: '◉', label: 'Meal logged' },
+    log_body_stats: { icon: '◉', label: 'Body stats logged' },
     log_peptide_cycle: { icon: '◇', label: 'Peptide cycle logged' },
     suggest_exercises: { icon: '⚡', label: 'Exercise suggestions' },
-    exercise_info:     { icon: '▸', label: 'Exercise info' },
+    exercise_info: { icon: '▸', label: 'Exercise info' },
   }
-
   const meta = labels[action] || { icon: '✓', label: action }
 
   if (isDisplay && action === 'suggest_exercises' && data?.exercises) {
@@ -161,18 +139,20 @@ function ActionCard({ action, data, result }) {
 
   const summaryLines = []
   if (data) {
-    if (data.date)           summaryLines.push(`Date: ${data.date}`)
-    if (data.muscle_group)   summaryLines.push(`Muscle: ${data.muscle_group}`)
-    if (data.title)          summaryLines.push(data.title)
+    if (data.date) summaryLines.push(`Date: ${data.date}`)
+    if (data.muscle_group) summaryLines.push(`Muscle: ${data.muscle_group}`)
+    if (data.title) summaryLines.push(data.title)
     if (data.duration_hours) summaryLines.push(`${data.duration_hours}h sleep`)
-    if (data.quality)        summaryLines.push(`Quality: ${data.quality}`)
-    if (data.duration_min)   summaryLines.push(`${data.duration_min} min`)
+    if (data.quality) summaryLines.push(`Quality: ${data.quality}`)
+    if (data.duration_min) summaryLines.push(`${data.duration_min} min`)
     if (data.distance_miles) summaryLines.push(`${data.distance_miles} mi`)
-    if (data.calories)       summaryLines.push(`${data.calories} kcal`)
+    if (data.calories) summaryLines.push(`${data.calories} kcal`)
+    if (data.calories_burned) summaryLines.push(`${data.calories_burned} kcal burned`)
     if (data.protein_g || data.protein) summaryLines.push(`${data.protein_g || data.protein}g protein`)
-    if (data.weight_lbs)     summaryLines.push(`${data.weight_lbs} lbs`)
-    if (data.stack_name)     summaryLines.push(data.stack_name)
-    if (data.exercises)      summaryLines.push(`${data.exercises.length} exercise${data.exercises.length !== 1 ? 's' : ''}`)
+    if (data.weight_lbs) summaryLines.push(`${data.weight_lbs} lbs`)
+    if (data.stack_name) summaryLines.push(data.stack_name)
+    if (data.activity) summaryLines.push(data.activity)
+    if (data.exercises) summaryLines.push(`${data.exercises.length} exercise${data.exercises.length !== 1 ? 's' : ''}`)
   }
 
   return (
@@ -180,29 +160,28 @@ function ActionCard({ action, data, result }) {
       <div style={ac.header}>
         <span style={ac.icon}>{isError ? '✗' : meta.icon}</span>
         <span style={{ ...ac.label, color: isError ? 'var(--red)' : 'var(--teal)' }}>
-          {isError ? `Failed to log — ${result.error}` : `✓ ${meta.label}`}
+          {isError ? `Failed — ${result.error}` : `✓ ${meta.label}`}
         </span>
       </div>
-      {summaryLines.length > 0 && (
-        <div style={ac.summary}>
-          {summaryLines.join(' · ')}
-        </div>
-      )}
+      {summaryLines.length > 0 && <div style={ac.summary}>{summaryLines.join(' · ')}</div>}
     </div>
   )
 }
 
-// ── Main component ───────────────────────────────────────────────────────────
+// ── Main ─────────────────────────────────────────────────────────────────────
 export default function NomisChat({ pageContext = '' }) {
-  const [open, setOpen]         = useState(false)
-  const [input, setInput]       = useState('')
+  const [open, setOpen] = useState(false)
+  const [input, setInput] = useState('')
   const [messages, setMessages] = useState([])
-  const [history, setHistory]   = useState([])
-  const [loading, setLoading]   = useState(false)
-  const [context, setContext]   = useState('')
+  const [history, setHistory] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [context, setContext] = useState('')
   const [ctxLoaded, setCtxLoaded] = useState(false)
-  const endRef                  = useRef(null)
-  const inputRef                = useRef(null)
+  const [imagePreview, setImagePreview] = useState(null)
+  const [imageData, setImageData] = useState(null)
+  const endRef = useRef(null)
+  const inputRef = useRef(null)
+  const fileRef = useRef(null)
 
   useEffect(() => {
     buildContext().then(ctx => { setContext(ctx); setCtxLoaded(true) })
@@ -216,27 +195,68 @@ export default function NomisChat({ pageContext = '' }) {
     if (open) setTimeout(() => inputRef.current?.focus(), 100)
   }, [open])
 
+  function handleImageSelect(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const base64 = ev.target.result
+      setImagePreview(base64)
+      // Strip the data:image/xxx;base64, prefix for the API
+      setImageData({
+        data: base64.split(',')[1],
+        media_type: file.type || 'image/jpeg',
+      })
+    }
+    reader.readAsDataURL(file)
+    // Reset file input so same file can be selected again
+    e.target.value = ''
+  }
+
+  function clearImage() {
+    setImagePreview(null)
+    setImageData(null)
+  }
+
   async function send() {
-    if (!input.trim() || loading) return
+    if ((!input.trim() && !imageData) || loading) return
     const msg = input.trim()
     setInput('')
     setLoading(true)
 
-    setMessages(prev => [...prev, { role: 'user', content: msg }])
+    // Build display message
+    const displayMsg = { role: 'user', content: msg || '(image)' }
+    if (imagePreview) displayMsg.image = imagePreview
+    setMessages(prev => [...prev, displayMsg])
 
-    const fullMessage = [
+    // Build message for API
+    const textParts = [
       context,
       pageContext ? `Current page: ${pageContext}` : '',
-      `User: ${msg}`
-    ].filter(Boolean).join('\n\n')
+    ]
+
+    if (imageData && !msg) {
+      textParts.push('User sent a screenshot. Extract all relevant health/fitness data from this image and log it appropriately. If it\'s a walk/run screenshot, log it as cardio with distance, duration, calories. If it\'s a sleep screenshot, log it as sleep with duration, stages, times. Tell the user what you logged.')
+    } else if (msg) {
+      textParts.push(`User: ${msg}`)
+    }
+
+    const fullMessage = textParts.filter(Boolean).join('\n\n')
+
+    // Clear image after sending
+    const sentImage = imageData
+    clearImage()
 
     try {
-      const res = await chat(fullMessage, history)
+      const body = { message: fullMessage, conversation_history: history }
+      if (sentImage) body.image = sentImage
+
+      const res = await chat(body.message, body.conversation_history, sentImage)
 
       if (res.response) {
         setHistory(prev => [
           ...prev,
-          { role: 'user', content: msg },
+          { role: 'user', content: msg || '(screenshot import)' },
           { role: 'assistant', content: res.response }
         ])
 
@@ -245,7 +265,7 @@ export default function NomisChat({ pageContext = '' }) {
           const result = await executeAction(res.parsed_data)
           actionCard = {
             action: res.parsed_data.action,
-            data:   res.parsed_data.data,
+            data: res.parsed_data.data,
             result,
           }
         }
@@ -291,16 +311,19 @@ export default function NomisChat({ pageContext = '' }) {
                 <div style={s.welcomeOrb}>N</div>
                 <div style={s.welcomeTitle}>Hey Simon.</div>
                 <div style={s.welcomeText} className="mono">
-                  I know your last 30 days. Just talk to me — tell me what you ate, how you slept, what you lifted. I'll log it automatically.
+                  I know your last 30 days. Talk to me or send a screenshot from Apple Health — I'll log it automatically.
                 </div>
                 <div style={s.examples}>
                   {[
                     'Bench 185x5x4, incline 70x10x3',
                     'Slept 7.5 hours, felt good',
-                    'Walked 2 miles this morning',
                     'Had chicken and rice for lunch, ~500 cal',
+                    '📸 Send a walk or sleep screenshot',
                   ].map((ex, i) => (
-                    <div key={i} style={s.exampleChip} onClick={() => { setInput(ex); inputRef.current?.focus() }}>
+                    <div key={i} style={s.exampleChip} onClick={() => {
+                      if (i === 3) { fileRef.current?.click(); return }
+                      setInput(ex); inputRef.current?.focus()
+                    }}>
                       {ex}
                     </div>
                   ))}
@@ -311,6 +334,11 @@ export default function NomisChat({ pageContext = '' }) {
             {messages.map((msg, i) => (
               <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '100%' }}>
                 {msg.role === 'assistant' && <div style={s.msgLabel} className="mono">NOMIS</div>}
+                {msg.image && (
+                  <div style={s.msgImageWrap}>
+                    <img src={msg.image} alt="Screenshot" style={s.msgImage} />
+                  </div>
+                )}
                 <div style={msg.role === 'user' ? s.msgUser : s.msgNomis}>
                   {msg.content}
                 </div>
@@ -337,22 +365,42 @@ export default function NomisChat({ pageContext = '' }) {
             <div ref={endRef} />
           </div>
 
+          {/* Image preview */}
+          {imagePreview && (
+            <div style={s.previewRow}>
+              <img src={imagePreview} alt="Preview" style={s.previewImg} />
+              <div style={s.previewInfo}>
+                <span style={s.previewText} className="mono">Screenshot ready</span>
+                <span style={s.previewHint} className="mono">Add a message or just hit send</span>
+              </div>
+              <button style={s.previewClose} onClick={clearImage}>✕</button>
+            </div>
+          )}
+
           {/* Input */}
           <div style={s.inputRow}>
+            <input type="file" ref={fileRef} accept="image/*" style={{ display: 'none' }} onChange={handleImageSelect} />
+            <button style={s.imageBtn} onClick={() => fileRef.current?.click()}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="3" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <path d="M21 15l-5-5L5 21" />
+              </svg>
+            </button>
             <input
               ref={inputRef}
               style={s.chatInput}
-              placeholder="Tell me what you did today..."
+              placeholder={imagePreview ? "Add context or just send..." : "Tell me what you did today..."}
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
             />
-            <button style={s.sendBtn} onClick={send} disabled={loading}>→</button>
+            <button style={{ ...s.sendBtn, opacity: loading || (!input.trim() && !imageData) ? 0.4 : 1 }} onClick={send} disabled={loading || (!input.trim() && !imageData)}>→</button>
           </div>
         </div>
       )}
 
-      {/* Orb button */}
+      {/* Orb */}
       <div style={s.orb} onClick={() => setOpen(o => !o)}>
         {open ? '✕' : 'N'}
       </div>
@@ -362,17 +410,13 @@ export default function NomisChat({ pageContext = '' }) {
 
 // ── Styles ───────────────────────────────────────────────────────────────────
 const s = {
-  wrap: {
-    position: 'fixed', bottom: '24px', right: '16px', zIndex: 200,
-    display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '10px',
-  },
+  wrap: { position: 'fixed', bottom: '24px', right: '16px', zIndex: 200, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '10px' },
   orb: {
     width: '52px', height: '52px', borderRadius: '16px',
     background: 'linear-gradient(135deg, rgba(34,211,238,0.15), rgba(45,212,191,0.08))',
-    border: '1px solid var(--cyan-border)',
-    color: 'var(--cyan)', fontFamily: 'var(--font-body)',
-    fontSize: '1.2rem', fontWeight: '700', cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    border: '1px solid var(--cyan-border)', color: 'var(--cyan)',
+    fontFamily: 'var(--font-body)', fontSize: '1.2rem', fontWeight: '700',
+    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
     letterSpacing: '0.05em', transition: 'box-shadow 0.2s',
     boxShadow: '0 4px 20px rgba(34,211,238,0.12)',
   },
@@ -390,60 +434,32 @@ const s = {
   panelOrb: {
     width: '32px', height: '32px', borderRadius: '10px',
     background: 'linear-gradient(135deg, rgba(34,211,238,0.15), rgba(45,212,191,0.06))',
-    border: '1px solid var(--cyan-border)',
-    color: 'var(--cyan)', fontFamily: 'var(--font-body)',
-    fontSize: '0.85rem', fontWeight: '700',
+    border: '1px solid var(--cyan-border)', color: 'var(--cyan)',
+    fontFamily: 'var(--font-body)', fontSize: '0.85rem', fontWeight: '700',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
-  panelName: {
-    fontFamily: 'var(--font-body)', fontSize: '0.9rem', fontWeight: '700',
-    color: '#fff', letterSpacing: '-0.01em',
-  },
-  panelStatus: {
-    fontSize: '0.44rem', color: 'var(--teal)', letterSpacing: '0.1em', opacity: 0.8,
-  },
-  closeBtn: {
-    background: 'transparent', border: 'none', color: 'var(--text3)',
-    fontSize: '0.85rem', cursor: 'pointer', padding: '4px 6px',
-  },
-  messages: {
-    flex: 1, overflowY: 'auto', padding: '16px',
-    display: 'flex', flexDirection: 'column', gap: '12px',
-  },
-  welcome: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    gap: '10px', textAlign: 'center', padding: '12px 4px',
-  },
+  panelName: { fontFamily: 'var(--font-body)', fontSize: '0.9rem', fontWeight: '700', color: '#fff', letterSpacing: '-0.01em' },
+  panelStatus: { fontSize: '0.44rem', color: 'var(--teal)', letterSpacing: '0.1em', opacity: 0.8 },
+  closeBtn: { background: 'transparent', border: 'none', color: 'var(--text3)', fontSize: '0.85rem', cursor: 'pointer', padding: '4px 6px' },
+  messages: { flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' },
+  welcome: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', textAlign: 'center', padding: '12px 4px' },
   welcomeOrb: {
     width: '48px', height: '48px', borderRadius: '15px',
     background: 'linear-gradient(135deg, rgba(34,211,238,0.15), rgba(45,212,191,0.06))',
-    border: '1px solid var(--cyan-border)',
-    color: 'var(--cyan)', fontFamily: 'var(--font-body)',
-    fontSize: '1.3rem', fontWeight: '700',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    marginBottom: '4px',
+    border: '1px solid var(--cyan-border)', color: 'var(--cyan)',
+    fontFamily: 'var(--font-body)', fontSize: '1.3rem', fontWeight: '700',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px',
   },
-  welcomeTitle: {
-    fontFamily: 'var(--font-body)', fontSize: '1.1rem', fontWeight: '600',
-    color: '#fff', letterSpacing: '-0.01em',
-  },
-  welcomeText: {
-    fontSize: '0.58rem', color: 'var(--text3)', lineHeight: '1.7', letterSpacing: '0.03em',
-  },
-  examples: {
-    display: 'flex', flexDirection: 'column', gap: '5px',
-    width: '100%', marginTop: '4px',
-  },
+  welcomeTitle: { fontFamily: 'var(--font-body)', fontSize: '1.1rem', fontWeight: '600', color: '#fff', letterSpacing: '-0.01em' },
+  welcomeText: { fontSize: '0.58rem', color: 'var(--text3)', lineHeight: '1.7', letterSpacing: '0.03em' },
+  examples: { display: 'flex', flexDirection: 'column', gap: '5px', width: '100%', marginTop: '4px' },
   exampleChip: {
     padding: '8px 12px', background: 'rgba(255,255,255,0.03)',
     border: '1px solid var(--border)', borderRadius: '8px',
     fontFamily: 'var(--font-body)', fontSize: '0.75rem',
-    color: 'var(--text3)', cursor: 'pointer', textAlign: 'left',
-    transition: 'all 0.15s',
+    color: 'var(--text3)', cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
   },
-  msgLabel: {
-    fontSize: '0.44rem', color: 'var(--cyan)', letterSpacing: '0.15em', opacity: 0.7,
-  },
+  msgLabel: { fontSize: '0.44rem', color: 'var(--cyan)', letterSpacing: '0.15em', opacity: 0.7 },
   msgNomis: {
     background: 'var(--cyan-dim)', border: '1px solid var(--cyan-border)',
     borderRadius: '12px', borderTopLeftRadius: '3px',
@@ -458,6 +474,12 @@ const s = {
     padding: '10px 14px', fontFamily: 'var(--font-body)',
     fontSize: '0.85rem', color: 'var(--text2)', lineHeight: '1.5',
   },
+  msgImageWrap: {
+    alignSelf: 'flex-end', maxWidth: '75%',
+    borderRadius: '12px', overflow: 'hidden',
+    border: '1px solid var(--border)',
+  },
+  msgImage: { width: '100%', display: 'block', borderRadius: '11px' },
   typing: {
     background: 'var(--cyan-dim)', border: '1px solid var(--cyan-border)',
     borderRadius: '12px', borderTopLeftRadius: '3px',
@@ -468,9 +490,35 @@ const s = {
     background: 'var(--cyan)', opacity: 0.6,
     animation: 'pulse 1s ease-in-out infinite',
   },
+
+  // Image preview
+  previewRow: {
+    display: 'flex', alignItems: 'center', gap: '10px',
+    padding: '8px 14px', borderTop: '1px solid var(--border)',
+    background: 'rgba(34,211,238,0.03)', flexShrink: 0,
+  },
+  previewImg: { width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover', border: '1px solid var(--border)' },
+  previewInfo: { flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' },
+  previewText: { fontSize: '0.55rem', color: 'var(--cyan)', letterSpacing: '0.06em' },
+  previewHint: { fontSize: '0.45rem', color: 'var(--text3)', letterSpacing: '0.04em' },
+  previewClose: {
+    width: '24px', height: '24px', borderRadius: '6px',
+    background: 'transparent', border: '1px solid var(--border)',
+    color: 'var(--text3)', fontSize: '0.7rem', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+
+  // Input row
   inputRow: {
-    display: 'flex', gap: '8px', padding: '12px 14px 14px',
-    borderTop: '1px solid var(--border)', flexShrink: 0,
+    display: 'flex', gap: '6px', padding: '12px 14px 14px',
+    borderTop: '1px solid var(--border)', flexShrink: 0, alignItems: 'center',
+  },
+  imageBtn: {
+    width: '40px', height: '40px', borderRadius: '10px',
+    background: 'transparent', border: '1px solid var(--border2)',
+    color: 'var(--text3)', cursor: 'pointer', flexShrink: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'all 0.15s',
   },
   chatInput: {
     flex: 1, background: 'rgba(255,255,255,0.03)',
@@ -489,36 +537,14 @@ const s = {
 }
 
 const ac = {
-  wrap: {
-    borderRadius: '10px', border: '1px solid var(--cyan-border)',
-    background: 'var(--cyan-dim)', padding: '10px 12px',
-    display: 'flex', flexDirection: 'column', gap: '6px',
-    alignSelf: 'flex-start', maxWidth: '90%',
-  },
+  wrap: { borderRadius: '10px', border: '1px solid var(--cyan-border)', background: 'var(--cyan-dim)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px', alignSelf: 'flex-start', maxWidth: '90%' },
   header: { display: 'flex', alignItems: 'center', gap: '7px' },
   icon: { fontSize: '0.85rem', color: 'var(--cyan)' },
-  label: {
-    fontFamily: 'var(--font-mono)', fontSize: '0.52rem',
-    color: 'var(--teal)', letterSpacing: '0.1em', fontWeight: '500',
-  },
-  summary: {
-    fontFamily: 'var(--font-mono)', fontSize: '0.5rem',
-    color: 'var(--text3)', letterSpacing: '0.04em', lineHeight: 1.5,
-  },
+  label: { fontFamily: 'var(--font-mono)', fontSize: '0.52rem', color: 'var(--teal)', letterSpacing: '0.1em', fontWeight: '500' },
+  summary: { fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: 'var(--text3)', letterSpacing: '0.04em', lineHeight: 1.5 },
   exGrid: { display: 'flex', flexDirection: 'column', gap: '5px', marginTop: '2px' },
-  exCard: {
-    background: 'rgba(255,255,255,0.03)', borderRadius: '7px', padding: '8px 10px',
-  },
-  exName: {
-    fontFamily: 'var(--font-body)', fontSize: '0.82rem', fontWeight: '600',
-    color: 'var(--text)', marginBottom: '2px',
-  },
-  exMeta: {
-    fontFamily: 'var(--font-mono)', fontSize: '0.45rem',
-    color: 'var(--text3)', letterSpacing: '0.06em',
-  },
-  exNote: {
-    fontFamily: 'var(--font-body)', fontSize: '0.72rem',
-    color: 'var(--text3)', marginTop: '3px', lineHeight: 1.4,
-  },
+  exCard: { background: 'rgba(255,255,255,0.03)', borderRadius: '7px', padding: '8px 10px' },
+  exName: { fontFamily: 'var(--font-body)', fontSize: '0.82rem', fontWeight: '600', color: 'var(--text)', marginBottom: '2px' },
+  exMeta: { fontFamily: 'var(--font-mono)', fontSize: '0.45rem', color: 'var(--text3)', letterSpacing: '0.06em' },
+  exNote: { fontFamily: 'var(--font-body)', fontSize: '0.72rem', color: 'var(--text3)', marginTop: '3px', lineHeight: 1.4 },
 }
