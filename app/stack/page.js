@@ -1,5 +1,5 @@
 'use client'
-import { getLocalDate } from '../lib/date'
+import { getLocalDate } from '../../lib/date'
 import { useState, useEffect, useCallback } from 'react'
 import Shell from '../../components/Shell'
 import NomisChat from '../../components/NomisChat'

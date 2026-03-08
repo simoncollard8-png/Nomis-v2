@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import Shell from '../../components/Shell'
 import NomisChat from '../../components/NomisChat'
 import { getTodaysWorkout, startWorkout, saveSets, checkAndSavePR, dbRead, dbWrite, getExerciseInfo, suggestExercises } from '../../lib/api'
+import { getLocalDate } from '../../lib/date'
 
 const WORKOUT_TYPES = ['Push', 'Pull', 'Legs', 'Upper', 'Lower', 'Full Body', 'Rest', 'Cardio']
 

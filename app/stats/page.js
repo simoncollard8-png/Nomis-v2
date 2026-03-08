@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import Shell from '../../components/Shell'
 import NomisChat from '../../components/NomisChat'
 import { getRecentWorkouts, getRecentBodyStats, getRecentSleep, getRecentCardio, getPersonalRecords, getRecentNutrition } from '../../lib/api'
+import { getLocalDate } from '../../lib/date'
 
 export default function Stats() {
   const [workouts, setWorkouts]   = useState([])
