@@ -1,223 +1,219 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Shell from '../../components/Shell'
 import NomisChat from '../../components/NomisChat'
-import { getTodaysNutrition, getRecentNutrition, logNutrition, dbRead, dbWrite } from '../../lib/api'
+import { dbRead, dbWrite, chat } from '../../lib/api'
 
-const MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner', 'Snack']
-
-export default function Nutrition() {
-  const [todayMeals, setTodayMeals] = useState([])
-  const [recentDays, setRecentDays] = useState([])
-  const [savedMeals, setSavedMeals] = useState([])
+export default function Stack() {
+  const [stack, setStack]           = useState([])
+  const [logs, setLogs]             = useState([])
   const [loading, setLoading]       = useState(true)
+  const [tab, setTab]               = useState('today')
+  const [toast, setToast]           = useState(null)
+
+  // Add/Edit
   const [showAdd, setShowAdd]       = useState(false)
+  const [editing, setEditing]       = useState(null)
   const [saving, setSaving]         = useState(false)
-  const [quickToast, setQuickToast] = useState(null)
-  const [showSaveToggle, setShowSaveToggle] = useState(false)
-  const [saveName, setSaveName]     = useState('')
+  const [form, setForm]             = useState({ name: '', dose: '', timing: '', category: 'supplement', notes: '' })
 
-  // Edit mode
-  const [editMode, setEditMode]       = useState(false)
-  const [editingMeal, setEditingMeal] = useState(null)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [showNewQuick, setShowNewQuick] = useState(false)
+  // AI
+  const [showAI, setShowAI]         = useState(false)
+  const [aiQuery, setAiQuery]       = useState('')
+  const [aiResponse, setAiResponse] = useState(null)
+  const [aiLoading, setAiLoading]   = useState(false)
+  const [selectedSupp, setSelectedSupp] = useState(null)
 
-  // Edit form
-  const [editName, setEditName]       = useState('')
-  const [editType, setEditType]       = useState('snack')
-  const [editCal, setEditCal]         = useState('')
-  const [editProtein, setEditProtein] = useState('')
-  const [editCarbs, setEditCarbs]     = useState('')
-  const [editFat, setEditFat]         = useState('')
+  const today = new Date().toISOString().split('T')[0]
 
-  // Log form
-  const [meal, setMeal]         = useState('Lunch')
-  const [desc, setDesc]         = useState('')
-  const [calories, setCalories] = useState('')
-  const [protein, setProtein]   = useState('')
-  const [carbs, setCarbs]       = useState('')
-  const [fat, setFat]           = useState('')
-
-  useEffect(() => { loadData() }, [])
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [today, recent, saved] = await Promise.all([
-        getTodaysNutrition(),
-        getRecentNutrition(30),
-        dbRead('saved_meals', {}, { order: 'use_count', limit: 20 }),
+      const [stackData, logData] = await Promise.all([
+        dbRead('supplement_stack', {}, { order: 'name', limit: 50 }),
+        dbRead('supplement_logs', { date: today }, { limit: 100 }),
       ])
-      setTodayMeals(today || [])
-      setSavedMeals(saved || [])
-
-      const grouped = {}
-      ;(recent || []).forEach(m => {
-        if (!grouped[m.date]) grouped[m.date] = []
-        grouped[m.date].push(m)
-      })
-      const days = Object.entries(grouped).map(([date, meals]) => ({
-        date,
-        meals,
-        calories: meals.reduce((a, b) => a + (parseInt(b.calories) || 0), 0),
-        protein: meals.reduce((a, b) => a + (parseInt(b.protein_g) || 0), 0),
-        carbs: meals.reduce((a, b) => a + (parseInt(b.carbs_g) || 0), 0),
-        fat: meals.reduce((a, b) => a + (parseInt(b.fat_g) || 0), 0),
-      })).sort((a, b) => b.date.localeCompare(a.date))
-      setRecentDays(days)
+      setStack((stackData || []).filter(s => s.active !== false))
+      setLogs(logData || [])
     } catch (err) {
-      console.error('Nutrition load error:', err)
+      console.error('Stack load error:', err)
     }
     setLoading(false)
+  }, [today])
+
+  useEffect(() => { loadData() }, [loadData])
+
+  function isTaken(supp) {
+    return logs.some(l =>
+      String(l.supplement_id) === String(supp.id) ||
+      l.name?.toLowerCase().trim() === supp.name?.toLowerCase().trim()
+    )
   }
 
-  async function handleQuickAdd(savedMeal) {
-    if (editMode) return
-    const today = new Date().toISOString().split('T')[0]
+  function getLogForSupp(supp) {
+    return logs.find(l =>
+      String(l.supplement_id) === String(supp.id) ||
+      l.name?.toLowerCase().trim() === supp.name?.toLowerCase().trim()
+    )
+  }
+
+  async function toggleTaken(supp) {
+    const existing = getLogForSupp(supp)
     try {
-      await logNutrition({
-        date: today,
-        meal: savedMeal.meal_type || 'snack',
-        description: savedMeal.name,
-        calories: savedMeal.calories,
-        protein_g: savedMeal.protein_g,
-        carbs_g: savedMeal.carbs_g,
-        fat_g: savedMeal.fat_g,
-      })
-      if (savedMeal.id) {
-        await dbWrite('saved_meals', 'update', {
-          use_count: (savedMeal.use_count || 0) + 1,
-        }, { id: savedMeal.id })
-      }
-      showToast(`${savedMeal.name} logged`)
-      await loadData()
-    } catch (err) {
-      console.error('Quick add error:', err)
-      showToast('Failed to log')
-    }
-  }
-
-  function openEditMeal(sm) {
-    setEditingMeal(sm)
-    setEditName(sm.name || '')
-    setEditType(sm.meal_type || 'snack')
-    setEditCal(sm.calories?.toString() || '')
-    setEditProtein(sm.protein_g?.toString() || '')
-    setEditCarbs(sm.carbs_g?.toString() || '')
-    setEditFat(sm.fat_g?.toString() || '')
-    setShowEditModal(true)
-  }
-
-  function openNewQuick() {
-    setEditingMeal(null)
-    setEditName('')
-    setEditType('snack')
-    setEditCal('')
-    setEditProtein('')
-    setEditCarbs('')
-    setEditFat('')
-    setShowNewQuick(true)
-    setShowEditModal(true)
-  }
-
-  async function handleSaveEdit() {
-    if (!editName.trim()) return
-    setSaving(true)
-    try {
-      const data = {
-        name: editName.trim(),
-        meal_type: editType,
-        description: editName.trim(),
-        calories: parseInt(editCal) || null,
-        protein_g: parseInt(editProtein) || null,
-        carbs_g: parseInt(editCarbs) || null,
-        fat_g: parseInt(editFat) || null,
-      }
-
-      if (editingMeal?.id) {
-        await dbWrite('saved_meals', 'update', data, { id: editingMeal.id })
-        showToast('Meal updated')
+      if (existing) {
+        // Untake — delete the log
+        await dbWrite('supplement_logs', 'delete', {}, { id: existing.id })
+        // Update local state immediately
+        setLogs(prev => prev.filter(l => l.id !== existing.id))
+        notify(`${supp.name} unmarked`)
       } else {
-        data.use_count = 0
-        await dbWrite('saved_meals', 'insert', data)
-        showToast('Meal added')
+        // Take — insert log
+        const result = await dbWrite('supplement_logs', 'insert', {
+          supplement_id: supp.id,
+          name: supp.name,
+          date: today,
+          taken: true,
+        })
+        // Update local state immediately
+        const newLog = result?.data?.[0] || { id: Date.now(), supplement_id: supp.id, name: supp.name, date: today, taken: true }
+        setLogs(prev => [...prev, newLog])
+        notify(`${supp.name} taken`)
       }
-
-      setShowEditModal(false)
-      setShowNewQuick(false)
-      setEditingMeal(null)
-      await loadData()
     } catch (err) {
-      console.error('Save edit error:', err)
-      showToast('Failed to save')
+      console.error('Toggle error:', err)
+      notify('Failed to update')
+      // Reload from DB on error
+      await loadData()
     }
-    setSaving(false)
   }
 
-  async function handleDeleteMeal(sm) {
-    if (!sm?.id) return
-    try {
-      await dbWrite('saved_meals', 'delete', {}, { id: sm.id })
-      showToast(`${sm.name} removed`)
-      setShowEditModal(false)
-      setEditingMeal(null)
-      await loadData()
-    } catch (err) {
-      console.error('Delete error:', err)
-      showToast('Failed to delete')
-    }
+  function openAdd() {
+    setEditing(null)
+    setForm({ name: '', dose: '', timing: '', category: 'supplement', notes: '' })
+    setShowAdd(true)
+  }
+
+  function openEdit(supp) {
+    setEditing(supp)
+    setForm({
+      name: supp.name || '',
+      dose: supp.dose || '',
+      timing: supp.timing || '',
+      category: supp.category || 'supplement',
+      notes: supp.notes || '',
+    })
+    setShowAdd(true)
   }
 
   async function handleSave() {
-    if (!desc.trim()) return
+    if (!form.name.trim()) return
     setSaving(true)
     try {
-      await logNutrition({
-        date: new Date().toISOString().split('T')[0],
-        meal: meal.toLowerCase(),
-        description: desc,
-        calories: calories || null,
-        protein_g: protein || null,
-        carbs_g: carbs || null,
-        fat_g: fat || null,
-      })
-
-      if (showSaveToggle && saveName.trim()) {
-        await dbWrite('saved_meals', 'insert', {
-          name: saveName.trim(),
-          meal_type: meal.toLowerCase(),
-          description: desc,
-          calories: parseInt(calories) || null,
-          protein_g: parseInt(protein) || null,
-          carbs_g: parseInt(carbs) || null,
-          fat_g: parseInt(fat) || null,
-          use_count: 1,
-        })
+      const data = {
+        name: form.name.trim(),
+        dose: form.dose || null,
+        timing: form.timing || null,
+        category: form.category,
+        notes: form.notes || null,
+        active: true,
       }
-
-      setDesc(''); setCalories(''); setProtein(''); setCarbs(''); setFat('')
-      setSaveName(''); setShowSaveToggle(false)
+      if (editing?.id) {
+        await dbWrite('supplement_stack', 'update', data, { id: editing.id })
+        notify('Updated')
+      } else {
+        await dbWrite('supplement_stack', 'insert', data)
+        notify('Added to stack')
+      }
       setShowAdd(false)
+      setEditing(null)
       await loadData()
     } catch (err) {
       console.error('Save error:', err)
+      notify('Failed to save')
     }
     setSaving(false)
   }
 
-  function showToast(msg) {
-    setQuickToast(msg)
-    setTimeout(() => setQuickToast(null), 2000)
+  async function handleDelete() {
+    if (!editing?.id) return
+    try {
+      await dbWrite('supplement_stack', 'update', { active: false }, { id: editing.id })
+      notify(`${editing.name} removed`)
+      setShowAdd(false)
+      setEditing(null)
+      await loadData()
+    } catch (err) {
+      console.error('Delete error:', err)
+    }
   }
 
-  const todayCals = todayMeals.reduce((a, b) => a + (parseInt(b.calories) || 0), 0)
-  const todayProtein = todayMeals.reduce((a, b) => a + (parseInt(b.protein_g) || 0), 0)
-  const todayCarbs = todayMeals.reduce((a, b) => a + (parseInt(b.carbs_g) || 0), 0)
-  const todayFat = todayMeals.reduce((a, b) => a + (parseInt(b.fat_g) || 0), 0)
+  async function askNomis(query) {
+    if (!query?.trim()) return
+    setAiLoading(true)
+    setAiResponse(null)
+    try {
+      const stackContext = stack.map(s => `${s.name} (${s.dose || 'no dose'}, ${s.timing || 'no timing'}, ${s.category})`).join(', ')
+      const fullQuery = `
+User's current supplement stack: ${stackContext || 'empty'}
+User's goal: Body recomposition — build muscle, cut fat.
+User's equipment: Home gym with dumbbells, bench, barbell, pull-up/dip station.
+
+The user is asking about supplements/peptides. Give a direct, research-backed answer. Include: what it does, mechanism of action, optimal dose and timing, interactions with their current stack, and how it relates to their goals. Be specific and coaching-focused, not generic.
+
+Question: ${query}
+      `.trim()
+
+      const res = await chat(fullQuery, [])
+      setAiResponse(res.response || 'No response from NOMIS.')
+    } catch {
+      setAiResponse('Connection error. Try again.')
+    }
+    setAiLoading(false)
+  }
+
+  function openSuppInfo(supp) {
+    setSelectedSupp(supp)
+    setShowAI(true)
+    setAiQuery('')
+    setAiResponse(null)
+    askNomis(`Tell me about ${supp.name}. What does it do, how does it help my goals, optimal dosing and timing, any interactions with my other supplements?`)
+  }
+
+  function notify(msg) {
+    setToast(msg)
+    setTimeout(() => setToast(null), 2000)
+  }
+
+  function updateForm(key, val) {
+    setForm(prev => ({ ...prev, [key]: val }))
+  }
+
+  const takenCount = stack.filter(s => isTaken(s)).length
+  const compliance = stack.length ? Math.round((takenCount / stack.length) * 100) : 0
+
+  // Group by timing
+  const morningItems = stack.filter(s => s.timing?.toLowerCase().includes('morning'))
+  const afternoonItems = stack.filter(s => s.timing?.toLowerCase().includes('afternoon') || s.timing?.toLowerCase().includes('lunch'))
+  const eveningItems = stack.filter(s => s.timing?.toLowerCase().includes('evening') || s.timing?.toLowerCase().includes('9pm') || s.timing?.toLowerCase().includes('8:30'))
+  const otherItems = stack.filter(s =>
+    !morningItems.includes(s) && !afternoonItems.includes(s) && !eveningItems.includes(s)
+  )
+
+  const timeGroups = [
+    { label: 'Morning', items: morningItems, color: 'var(--orange)' },
+    { label: 'Afternoon', items: afternoonItems, color: 'var(--cyan)' },
+    { label: 'Evening', items: eveningItems, color: '#a78bfa' },
+    { label: 'Other', items: otherItems, color: 'var(--text3)' },
+  ].filter(g => g.items.length > 0)
+
+  const tabs = [
+    { key: 'today', label: 'Today' },
+    { key: 'stack', label: 'My Stack' },
+    { key: 'explore', label: 'Explore' },
+  ]
 
   if (loading) return (
-    <Shell title="Nutrition">
+    <Shell title="Stack">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
         <span className="mono" style={{ fontSize: '0.6rem', color: 'var(--text3)', letterSpacing: '0.12em' }}>LOADING...</span>
       </div>
@@ -225,298 +221,308 @@ export default function Nutrition() {
   )
 
   return (
-    <Shell title="Nutrition">
+    <Shell title="Stack">
       <div style={s.page}>
 
-        {quickToast && (
+        {toast && (
           <div style={s.toast} className="animate-fadeIn">
-            <span className="mono">{quickToast}</span>
+            <span className="mono">{toast}</span>
           </div>
         )}
 
-        {/* Today's summary */}
-        <div style={s.section}>
-          <div className="section-label" style={s.sLabel}>Today</div>
-          <div className="card" style={s.macroCard}>
-            <div style={s.macroRow}>
-              <div style={s.macroItem}>
-                <div style={{ ...s.macroValue, color: 'var(--orange)' }} className="mono">{todayCals || '--'}</div>
-                <div style={s.macroLabel} className="mono">Calories</div>
-              </div>
-              <div style={s.macroItem}>
-                <div style={{ ...s.macroValue, color: 'var(--cyan)' }} className="mono">{todayProtein || '--'}</div>
-                <div style={s.macroLabel} className="mono">Protein</div>
-              </div>
-              <div style={s.macroItem}>
-                <div style={{ ...s.macroValue, color: 'var(--teal)' }} className="mono">{todayCarbs || '--'}</div>
-                <div style={s.macroLabel} className="mono">Carbs</div>
-              </div>
-              <div style={{ ...s.macroItem, borderRight: 'none' }}>
-                <div style={{ ...s.macroValue, color: '#a78bfa' }} className="mono">{todayFat || '--'}</div>
-                <div style={s.macroLabel} className="mono">Fat</div>
-              </div>
-            </div>
-            <div style={s.mealCount} className="mono">{todayMeals.length} meal{todayMeals.length !== 1 ? 's' : ''} logged</div>
-          </div>
+        {/* Tab bar */}
+        <div style={s.tabBar}>
+          {tabs.map(t => (
+            <button key={t.key} style={{
+              ...s.tab,
+              ...(tab === t.key ? s.tabActive : {}),
+            }} onClick={() => setTab(t.key)}>{t.label}</button>
+          ))}
         </div>
 
-        {/* Quick add */}
-        <div style={s.section}>
-          <div style={s.sectionHeader}>
-            <span className="section-label">Quick add</span>
-            <div style={s.quickActions}>
-              <button
-                style={{ ...s.editToggle, ...(editMode ? s.editToggleOn : {}) }}
-                onClick={() => setEditMode(!editMode)}
-                className="mono"
-              >
-                {editMode ? 'Done' : 'Edit'}
-              </button>
-            </div>
-          </div>
-          <div style={s.quickGrid}>
-            {savedMeals.map((sm) => (
-              <div
-                key={sm.id}
-                className="card-sm"
-                style={{ ...s.quickCard, ...(editMode ? s.quickCardEdit : {}) }}
-                onClick={() => editMode ? openEditMeal(sm) : handleQuickAdd(sm)}
-              >
-                {editMode && (
-                  <div style={s.editBadge} className="mono">tap to edit</div>
-                )}
-                <div style={s.quickTop}>
-                  <div style={s.quickName}>{sm.name}</div>
-                  <div style={s.quickType} className="mono">{(sm.meal_type || 'snack').toUpperCase()}</div>
+        {/* ── TODAY ── */}
+        {tab === 'today' && (
+          <>
+            {/* Compliance */}
+            <div style={s.section}>
+              <div className="section-label" style={s.sLabel}>Daily compliance</div>
+              <div className="card" style={s.compCard}>
+                <div style={s.compTop}>
+                  <div style={s.compLeft}>
+                    <span style={{
+                      ...s.compNum,
+                      color: compliance === 100 ? 'var(--teal)' : compliance > 50 ? 'var(--cyan)' : 'var(--orange)',
+                    }} className="mono">{compliance}%</span>
+                    {compliance === 100 && <span style={s.compComplete} className="mono">ALL TAKEN</span>}
+                  </div>
+                  <div style={s.compMeta} className="mono">{takenCount} of {stack.length}</div>
                 </div>
-                <div style={s.quickMacros}>
-                  <span className="mono" style={s.quickMacro}>
-                    <span style={{ color: 'var(--orange)' }}>{sm.calories || '--'}</span> cal
-                  </span>
-                  <span className="mono" style={s.quickMacro}>
-                    <span style={{ color: 'var(--cyan)' }}>{sm.protein_g || '--'}</span>g P
-                  </span>
-                  <span className="mono" style={s.quickMacro}>
-                    <span style={{ color: 'var(--teal)' }}>{sm.carbs_g || '--'}</span>g C
-                  </span>
-                  <span className="mono" style={s.quickMacro}>
-                    <span style={{ color: '#a78bfa' }}>{sm.fat_g || '--'}</span>g F
-                  </span>
+                <div style={s.compBar}>
+                  <div style={{
+                    ...s.compFill,
+                    width: `${compliance}%`,
+                    background: compliance === 100
+                      ? 'linear-gradient(90deg, var(--teal), var(--cyan))'
+                      : 'linear-gradient(90deg, var(--cyan), var(--teal))',
+                  }} />
                 </div>
               </div>
-            ))}
-
-            {/* Add new quick meal card */}
-            <div style={s.addQuickCard} onClick={openNewQuick}>
-              <span style={s.addQuickPlus}>+</span>
-              <span style={s.addQuickLabel}>Add quick meal</span>
             </div>
-          </div>
-        </div>
 
-        {/* Today's meals */}
-        <div style={s.section}>
-          <div style={s.sectionHeader}>
-            <span className="section-label">Meals</span>
-            <button style={s.addBtn} onClick={() => setShowAdd(true)}>+ Log meal</button>
-          </div>
+            {/* Grouped checklist */}
+            <div style={s.section}>
+              <div style={s.sectionHeader}>
+                <span className="section-label">Checklist</span>
+                <button style={s.addSmBtn} onClick={openAdd} className="mono">+ Add</button>
+              </div>
 
-          {todayMeals.length === 0 ? (
-            <div className="card" style={s.emptyCard}>
-              <div className="mono" style={s.emptyText}>No meals logged today</div>
-              <div style={s.emptyHint}>Tap a quick meal above or use "+ Log meal"</div>
-            </div>
-          ) : (
-            <div style={s.mealList}>
-              {todayMeals.map((m, i) => (
-                <div key={i} className="card-sm" style={s.mealCard}>
-                  <div style={s.mealTop}>
-                    <div>
-                      <div style={s.mealType} className="mono">{(m.meal || 'Meal').toUpperCase()}</div>
-                      <div style={s.mealDesc}>{m.description || '--'}</div>
+              {stack.length === 0 ? (
+                <div className="card" style={s.emptyCard}>
+                  <div className="mono" style={s.emptyText}>No supplements in your stack</div>
+                  <div style={s.emptyHint}>Tap "+ Add" to build your stack, or explore below</div>
+                </div>
+              ) : (
+                timeGroups.map(group => (
+                  <div key={group.label} style={{ marginBottom: '12px' }}>
+                    <div style={s.groupLabel}>
+                      <div style={{ ...s.groupDot, background: group.color }} />
+                      <span className="mono" style={{ ...s.groupText, color: group.color }}>{group.label.toUpperCase()}</span>
+                      <span className="mono" style={s.groupCount}>
+                        {group.items.filter(i => isTaken(i)).length}/{group.items.length}
+                      </span>
+                    </div>
+                    <div className="card" style={s.checklistCard}>
+                      {group.items.map((supp, i) => {
+                        const taken = isTaken(supp)
+                        return (
+                          <div key={supp.id} style={{
+                            ...s.checkRow,
+                            borderBottom: i < group.items.length - 1 ? '1px solid var(--border)' : 'none',
+                          }}>
+                            <div style={s.checkLeft} onClick={() => toggleTaken(supp)}>
+                              <div style={{
+                                ...s.checkBox,
+                                ...(taken ? s.checkBoxOn : {}),
+                              }}>
+                                {taken && <span style={s.checkMark}>✓</span>}
+                              </div>
+                              <div style={{ opacity: taken ? 0.45 : 1, transition: 'opacity 0.2s' }}>
+                                <div style={{
+                                  ...s.checkName,
+                                  textDecoration: taken ? 'line-through' : 'none',
+                                  textDecorationColor: 'var(--text3)',
+                                }}>{supp.name}</div>
+                                <div style={s.checkDose} className="mono">
+                                  {supp.dose || supp.category}
+                                </div>
+                              </div>
+                            </div>
+                            <button style={s.infoBtn} onClick={() => openSuppInfo(supp)}>
+                              <span style={s.infoBtnText} className="mono">?</span>
+                            </button>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
-                  <div style={s.mealMacros}>
-                    <span style={s.mealMacro} className="mono"><span style={{ color: 'var(--orange)' }}>{m.calories || '--'}</span> cal</span>
-                    <span style={s.mealMacro} className="mono"><span style={{ color: 'var(--cyan)' }}>{m.protein_g || '--'}</span>g P</span>
-                    <span style={s.mealMacro} className="mono"><span style={{ color: 'var(--teal)' }}>{m.carbs_g || '--'}</span>g C</span>
-                    <span style={s.mealMacro} className="mono"><span style={{ color: '#a78bfa' }}>{m.fat_g || '--'}</span>g F</span>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
 
-        {/* Recent days */}
-        {recentDays.length > 1 && (
+        {/* ── MY STACK ── */}
+        {tab === 'stack' && (
           <div style={s.section}>
-            <div className="section-label" style={s.sLabel}>Recent days</div>
-            <div className="card" style={s.recentCard}>
-              {recentDays.slice(0, 7).map((day, i) => (
-                <div key={day.date} style={{
-                  ...s.recentRow,
-                  borderBottom: i < Math.min(recentDays.length, 7) - 1 ? '1px solid var(--border)' : 'none',
-                }}>
-                  <div>
-                    <div style={s.recentDate}>{new Date(day.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
-                    <div style={s.recentMeals} className="mono">{day.meals.length} meal{day.meals.length !== 1 ? 's' : ''}</div>
+            <div style={s.sectionHeader}>
+              <span className="section-label">Your stack</span>
+              <button style={s.addSmBtn} onClick={openAdd} className="mono">+ Add</button>
+            </div>
+
+            {stack.length === 0 ? (
+              <div className="card" style={s.emptyCard}>
+                <div className="mono" style={s.emptyText}>Stack is empty</div>
+              </div>
+            ) : (
+              <div style={s.stackList}>
+                {stack.map((supp) => (
+                  <div key={supp.id} className="card-sm" style={s.stackCard}>
+                    <div style={s.stackCardTop}>
+                      <div>
+                        <div style={s.stackName}>{supp.name}</div>
+                        <div style={s.stackDose} className="mono">{supp.dose || 'No dose set'}</div>
+                      </div>
+                      <span style={{
+                        ...s.catBadge,
+                        color: supp.category === 'peptide' ? '#a78bfa' : 'var(--cyan)',
+                        background: supp.category === 'peptide' ? 'rgba(167,139,250,0.08)' : 'var(--cyan-dim)',
+                        borderColor: supp.category === 'peptide' ? 'rgba(167,139,250,0.2)' : 'var(--cyan-border)',
+                      }} className="mono">{supp.category}</span>
+                    </div>
+                    <div style={s.stackMeta}>
+                      {supp.timing && <span className="mono" style={s.stackTiming}>{supp.timing}</span>}
+                      {supp.notes && <span style={s.stackNotes}>{supp.notes}</span>}
+                    </div>
+                    <div style={s.stackActions}>
+                      <button style={s.stackEditBtn} onClick={() => openEdit(supp)} className="mono">Edit</button>
+                      <button style={s.stackInfoBtn} onClick={() => openSuppInfo(supp)} className="mono">Ask NOMIS</button>
+                    </div>
                   </div>
-                  <div style={s.recentMacros}>
-                    <span className="mono" style={{ ...s.recentVal, color: 'var(--orange)' }}>{day.calories}</span>
-                    <span className="mono" style={{ ...s.recentVal, color: 'var(--cyan)' }}>{day.protein}g</span>
-                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── EXPLORE ── */}
+        {tab === 'explore' && (
+          <div style={s.section}>
+            <div className="section-label" style={s.sLabel}>Ask NOMIS about supplements</div>
+            <div className="card" style={s.exploreCard}>
+              <div style={s.exploreHeader}>
+                <div style={s.exploreOrb}>N</div>
+                <div>
+                  <div style={s.exploreTitle}>Supplement Intelligence</div>
+                  <div style={s.exploreSub} className="mono">Research-backed answers personalized to your stack and goals</div>
                 </div>
-              ))}
+              </div>
+
+              <div style={s.exploreInputRow}>
+                <input
+                  style={s.exploreInput}
+                  placeholder="Ask anything — 'should I take ashwagandha?'"
+                  value={aiQuery}
+                  onChange={e => setAiQuery(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') askNomis(aiQuery) }}
+                />
+                <button
+                  style={{ ...s.exploreSend, opacity: aiLoading || !aiQuery.trim() ? 0.4 : 1 }}
+                  onClick={() => askNomis(aiQuery)}
+                  disabled={aiLoading || !aiQuery.trim()}
+                >→</button>
+              </div>
+
+              {aiLoading && (
+                <div style={s.aiLoading} className="mono">NOMIS is researching...</div>
+              )}
+
+              {aiResponse && !aiLoading && (
+                <div style={s.aiResponse}>{aiResponse}</div>
+              )}
+
+              {!aiResponse && !aiLoading && (
+                <div style={s.promptGrid}>
+                  {[
+                    'What supplements help with muscle recovery?',
+                    'Should I add magnesium to my stack?',
+                    'Best supplements for sleep quality?',
+                    'What peptides help with body recomp?',
+                    'Creatine timing and dosage?',
+                    'How do my current supplements interact?',
+                  ].map((prompt, i) => (
+                    <div key={i} style={s.promptChip} onClick={() => { setAiQuery(prompt); askNomis(prompt) }}>
+                      {prompt}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* ── Edit / New Quick Meal Modal ── */}
-        {showEditModal && (
-          <div style={s.modalOverlay} onClick={(e) => { if (e.target === e.currentTarget) { setShowEditModal(false); setShowNewQuick(false); setEditingMeal(null) } }}>
+        {/* ── AI Info Modal ── */}
+        {showAI && (
+          <div style={s.modalOverlay} onClick={(e) => { if (e.target === e.currentTarget) { setShowAI(false); setSelectedSupp(null); setAiResponse(null) } }}>
             <div style={s.modal} className="animate-fadeIn">
               <div style={s.modalHeader}>
-                <span style={s.modalTitle}>{editingMeal ? 'Edit Quick Meal' : 'New Quick Meal'}</span>
-                <button style={s.modalClose} onClick={() => { setShowEditModal(false); setShowNewQuick(false); setEditingMeal(null) }}>
+                <div>
+                  <span style={s.modalTitle}>{selectedSupp?.name || 'NOMIS Intelligence'}</span>
+                  {selectedSupp?.dose && <div className="mono" style={s.modalSub}>{selectedSupp.dose} · {selectedSupp.timing || selectedSupp.category}</div>}
+                </div>
+                <button style={s.modalClose} onClick={() => { setShowAI(false); setSelectedSupp(null); setAiResponse(null) }}>
                   <span style={{ position: 'absolute', width: '14px', height: '1.5px', background: 'var(--text3)', transform: 'rotate(45deg)' }} />
                   <span style={{ position: 'absolute', width: '14px', height: '1.5px', background: 'var(--text3)', transform: 'rotate(-45deg)' }} />
                 </button>
               </div>
+              <div style={s.aiModalBody}>
+                {aiLoading && <div style={s.aiLoading} className="mono">NOMIS is researching...</div>}
+                {aiResponse && !aiLoading && <div style={s.aiModalResponse}>{aiResponse}</div>}
+                <div style={s.followUp}>
+                  <input
+                    style={s.followUpInput}
+                    placeholder="Ask a follow-up..."
+                    value={aiQuery}
+                    onChange={e => setAiQuery(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') askNomis(aiQuery) }}
+                  />
+                  <button
+                    style={{ ...s.followUpSend, opacity: aiLoading || !aiQuery.trim() ? 0.4 : 1 }}
+                    onClick={() => askNomis(aiQuery)}
+                    disabled={aiLoading || !aiQuery.trim()}
+                  >→</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
+        {/* ── Add/Edit Modal ── */}
+        {showAdd && (
+          <div style={s.modalOverlay} onClick={(e) => { if (e.target === e.currentTarget) { setShowAdd(false); setEditing(null) } }}>
+            <div style={s.modal} className="animate-fadeIn">
+              <div style={s.modalHeader}>
+                <span style={s.modalTitle}>{editing ? 'Edit Supplement' : 'Add to Stack'}</span>
+                <button style={s.modalClose} onClick={() => { setShowAdd(false); setEditing(null) }}>
+                  <span style={{ position: 'absolute', width: '14px', height: '1.5px', background: 'var(--text3)', transform: 'rotate(45deg)' }} />
+                  <span style={{ position: 'absolute', width: '14px', height: '1.5px', background: 'var(--text3)', transform: 'rotate(-45deg)' }} />
+                </button>
+              </div>
               <div style={s.formBody}>
                 <div style={s.formLabel} className="mono">Name</div>
-                <input style={s.input} placeholder="e.g. Chicken & Rice" value={editName} onChange={e => setEditName(e.target.value)} />
+                <input style={s.input} placeholder="e.g. Creatine Monohydrate" value={form.name} onChange={e => updateForm('name', e.target.value)} />
 
-                <div style={s.formLabel} className="mono">Meal type</div>
-                <div style={s.typeRow}>
-                  {MEAL_TYPES.map(t => (
-                    <button key={t} style={{
-                      ...s.typeBtn,
-                      ...(editType === t.toLowerCase() ? s.typeBtnActive : {}),
-                    }} onClick={() => setEditType(t.toLowerCase())}>{t}</button>
+                <div style={s.formLabel} className="mono">Category</div>
+                <div style={s.catRow}>
+                  {['supplement', 'peptide', 'vitamin', 'mineral', 'amino'].map(c => (
+                    <button key={c} style={{
+                      ...s.catChip,
+                      ...(form.category === c ? s.catChipActive : {}),
+                    }} onClick={() => updateForm('category', c)}>{c}</button>
                   ))}
                 </div>
 
-                <div style={s.macroInputs}>
-                  <div style={s.macroInputWrap}>
-                    <label style={s.inputLabel} className="mono">Calories</label>
-                    <input style={s.inputSm} className="mono" type="number" inputMode="numeric" placeholder="--" value={editCal} onChange={e => setEditCal(e.target.value)} />
+                <div style={s.formRow}>
+                  <div style={s.formHalf}>
+                    <div style={s.formLabel} className="mono">Dose</div>
+                    <input style={s.input} placeholder="e.g. 5g" value={form.dose} onChange={e => updateForm('dose', e.target.value)} />
                   </div>
-                  <div style={s.macroInputWrap}>
-                    <label style={s.inputLabel} className="mono">Protein</label>
-                    <input style={s.inputSm} className="mono" type="number" inputMode="numeric" placeholder="--" value={editProtein} onChange={e => setEditProtein(e.target.value)} />
-                  </div>
-                  <div style={s.macroInputWrap}>
-                    <label style={s.inputLabel} className="mono">Carbs</label>
-                    <input style={s.inputSm} className="mono" type="number" inputMode="numeric" placeholder="--" value={editCarbs} onChange={e => setEditCarbs(e.target.value)} />
-                  </div>
-                  <div style={s.macroInputWrap}>
-                    <label style={s.inputLabel} className="mono">Fat</label>
-                    <input style={s.inputSm} className="mono" type="number" inputMode="numeric" placeholder="--" value={editFat} onChange={e => setEditFat(e.target.value)} />
+                  <div style={s.formHalf}>
+                    <div style={s.formLabel} className="mono">Timing</div>
+                    <input style={s.input} placeholder="e.g. Morning" value={form.timing} onChange={e => updateForm('timing', e.target.value)} />
                   </div>
                 </div>
+
+                <div style={s.formLabel} className="mono">Notes</div>
+                <input style={s.input} placeholder="Optional notes" value={form.notes} onChange={e => updateForm('notes', e.target.value)} />
 
                 <button
-                  style={{ ...s.saveBtn, opacity: saving || !editName.trim() ? 0.4 : 1 }}
-                  onClick={handleSaveEdit}
-                  disabled={saving || !editName.trim()}
+                  style={{ ...s.saveBtn, opacity: saving || !form.name.trim() ? 0.4 : 1 }}
+                  onClick={handleSave}
+                  disabled={saving || !form.name.trim()}
                 >
-                  {saving ? 'Saving...' : editingMeal ? 'Save changes' : 'Add quick meal'}
+                  {saving ? 'Saving...' : editing ? 'Save changes' : 'Add to stack'}
                 </button>
 
-                {editingMeal && (
-                  <button style={s.deleteBtn} onClick={() => handleDeleteMeal(editingMeal)}>
-                    Delete this meal
-                  </button>
+                {editing && (
+                  <button style={s.deleteBtn} onClick={handleDelete}>Remove from stack</button>
                 )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Log Meal Modal ── */}
-        {showAdd && (
-          <div style={s.modalOverlay} onClick={(e) => { if (e.target === e.currentTarget) setShowAdd(false) }}>
-            <div style={s.modal} className="animate-fadeIn">
-              <div style={s.modalHeader}>
-                <span style={s.modalTitle}>Log Meal</span>
-                <button style={s.modalClose} onClick={() => setShowAdd(false)}>
-                  <span style={{ position: 'absolute', width: '14px', height: '1.5px', background: 'var(--text3)', transform: 'rotate(45deg)' }} />
-                  <span style={{ position: 'absolute', width: '14px', height: '1.5px', background: 'var(--text3)', transform: 'rotate(-45deg)' }} />
-                </button>
-              </div>
-
-              <div style={s.typeRow}>
-                {MEAL_TYPES.map(t => (
-                  <button key={t} style={{
-                    ...s.typeBtn,
-                    ...(meal === t ? s.typeBtnActive : {}),
-                  }} onClick={() => setMeal(t)}>{t}</button>
-                ))}
-              </div>
-
-              <div style={s.formBody}>
-                <input style={s.input} placeholder="What did you eat?" value={desc} onChange={e => setDesc(e.target.value)} />
-
-                <div style={s.macroInputs}>
-                  <div style={s.macroInputWrap}>
-                    <label style={s.inputLabel} className="mono">Calories</label>
-                    <input style={s.inputSm} className="mono" type="number" inputMode="numeric" placeholder="--" value={calories} onChange={e => setCalories(e.target.value)} />
-                  </div>
-                  <div style={s.macroInputWrap}>
-                    <label style={s.inputLabel} className="mono">Protein</label>
-                    <input style={s.inputSm} className="mono" type="number" inputMode="numeric" placeholder="--" value={protein} onChange={e => setProtein(e.target.value)} />
-                  </div>
-                  <div style={s.macroInputWrap}>
-                    <label style={s.inputLabel} className="mono">Carbs</label>
-                    <input style={s.inputSm} className="mono" type="number" inputMode="numeric" placeholder="--" value={carbs} onChange={e => setCarbs(e.target.value)} />
-                  </div>
-                  <div style={s.macroInputWrap}>
-                    <label style={s.inputLabel} className="mono">Fat</label>
-                    <input style={s.inputSm} className="mono" type="number" inputMode="numeric" placeholder="--" value={fat} onChange={e => setFat(e.target.value)} />
-                  </div>
-                </div>
-
-                <div
-                  style={s.saveToggleRow}
-                  onClick={() => {
-                    setShowSaveToggle(!showSaveToggle)
-                    if (!showSaveToggle && !saveName) setSaveName(desc)
-                  }}
-                >
-                  <div style={{
-                    ...s.toggleBox,
-                    ...(showSaveToggle ? s.toggleBoxOn : {}),
-                  }}>
-                    {showSaveToggle && <span style={s.toggleCheck}>✓</span>}
-                  </div>
-                  <span style={s.saveToggleLabel}>Save as quick meal</span>
-                </div>
-
-                {showSaveToggle && (
-                  <input
-                    style={s.input}
-                    placeholder="Quick meal name (e.g. Chicken & Rice)"
-                    value={saveName}
-                    onChange={e => setSaveName(e.target.value)}
-                  />
-                )}
-
-                <div className="mono" style={s.formHint}>
-                  Leave macros blank and NOMIS will estimate from the description
-                </div>
-
-                <button style={{ ...s.saveBtn, opacity: saving || !desc.trim() ? 0.4 : 1 }} onClick={handleSave} disabled={saving || !desc.trim()}>
-                  {saving ? 'Saving...' : 'Log meal'}
-                </button>
               </div>
             </div>
           </div>
         )}
 
       </div>
-      <NomisChat pageContext={`Nutrition page. Today: ${todayCals} cal, ${todayProtein}g protein, ${todayMeals.length} meals logged.`} />
+      <NomisChat pageContext={`Stack page. ${stack.length} supplements, ${takenCount}/${stack.length} taken today. Stack: ${stack.map(s => s.name).join(', ')}`} />
     </Shell>
   )
 }
@@ -529,151 +535,200 @@ const s = {
 
   toast: {
     position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)',
-    zIndex: 300, background: 'rgba(45,212,191,0.1)', border: '1px solid var(--teal-border)',
+    zIndex: 600, background: 'rgba(45,212,191,0.1)', border: '1px solid var(--teal-border)',
     borderRadius: '12px', padding: '10px 20px',
     fontSize: '0.6rem', color: 'var(--teal)', letterSpacing: '0.06em',
     boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
   },
 
-  macroCard: { margin: '0 24px', overflow: 'hidden' },
-  macroRow: { display: 'flex', padding: '4px 0' },
-  macroItem: { flex: 1, padding: '18px 0', textAlign: 'center', borderRight: '1px solid var(--border)' },
-  macroValue: { fontSize: '1.1rem', fontWeight: '600', lineHeight: 1, marginBottom: '6px' },
-  macroLabel: { fontSize: '0.42rem', color: 'var(--text3)', letterSpacing: '0.1em', textTransform: 'uppercase' },
-  mealCount: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.06em', textAlign: 'center', padding: '8px 0 14px', borderTop: '1px solid var(--border)' },
+  tabBar: { display: 'flex', gap: '4px', padding: '16px 24px 24px' },
+  tab: {
+    padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border)',
+    background: 'transparent', color: 'var(--text3)', fontSize: '0.75rem',
+    fontWeight: '500', cursor: 'pointer', fontFamily: 'var(--font-body)', transition: 'all 0.15s',
+  },
+  tabActive: { background: 'var(--cyan-dim)', borderColor: 'var(--cyan-border)', color: 'var(--cyan)' },
 
-  quickActions: { display: 'flex', gap: '8px', alignItems: 'center' },
-  editToggle: {
-    padding: '5px 12px', borderRadius: '6px', border: '1px solid var(--border)',
-    background: 'transparent', color: 'var(--text3)', fontSize: '0.5rem',
-    letterSpacing: '0.06em', cursor: 'pointer', transition: 'all 0.15s',
-  },
-  editToggleOn: {
-    background: 'var(--cyan-dim)', borderColor: 'var(--cyan-border)', color: 'var(--cyan)',
-  },
-  quickGrid: { display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '0 24px' },
-  quickCard: {
-    padding: '12px 14px', cursor: 'pointer', transition: 'all 0.15s',
-    flex: '0 0 calc(50% - 4px)', minWidth: '140px',
-  },
-  quickCardEdit: { borderColor: 'var(--cyan-border)', borderStyle: 'dashed' },
-  editBadge: {
-    fontSize: '0.4rem', color: 'var(--cyan)', letterSpacing: '0.08em',
-    marginBottom: '6px', textTransform: 'uppercase',
-  },
-  quickTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' },
-  quickName: { fontSize: '0.85rem', fontWeight: '600', color: 'var(--text)' },
-  quickType: { fontSize: '0.4rem', color: 'var(--text3)', letterSpacing: '0.1em', flexShrink: 0, marginLeft: '8px' },
-  quickMacros: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
-  quickMacro: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.03em' },
-
-  addQuickCard: {
-    flex: '0 0 calc(50% - 4px)', minWidth: '140px',
-    border: '1.5px dashed var(--border2)', borderRadius: 'var(--radius-md)',
-    padding: '12px 14px', display: 'flex', flexDirection: 'column',
-    alignItems: 'center', justifyContent: 'center', gap: '4px',
-    cursor: 'pointer', transition: 'all 0.15s', minHeight: '80px',
-  },
-  addQuickPlus: { fontSize: '1.1rem', color: 'var(--text3)', fontWeight: '300', lineHeight: 1 },
-  addQuickLabel: { fontSize: '0.65rem', color: 'var(--text3)' },
-
-  addBtn: {
-    padding: '6px 14px', borderRadius: '8px', border: '1px solid var(--orange-border)',
-    background: 'var(--orange-dim)', color: 'var(--orange)',
-    fontFamily: 'var(--font-mono)', fontSize: '0.52rem', letterSpacing: '0.06em',
-    cursor: 'pointer',
+  addSmBtn: {
+    padding: '5px 12px', borderRadius: '6px', border: '1px solid var(--cyan-border)',
+    background: 'var(--cyan-dim)', color: 'var(--cyan)', fontSize: '0.5rem',
+    letterSpacing: '0.06em', cursor: 'pointer',
   },
 
-  emptyCard: { margin: '0 24px', padding: '32px 20px', textAlign: 'center' },
+  // Compliance
+  compCard: { margin: '0 24px', padding: '20px', overflow: 'hidden' },
+  compTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
+  compLeft: { display: 'flex', alignItems: 'center', gap: '10px' },
+  compNum: { fontSize: '1.5rem', fontWeight: '700', lineHeight: 1 },
+  compComplete: { fontSize: '0.48rem', color: 'var(--teal)', letterSpacing: '0.1em' },
+  compMeta: { fontSize: '0.52rem', color: 'var(--text3)', letterSpacing: '0.06em' },
+  compBar: { height: '4px', background: 'rgba(255,255,255,0.04)', borderRadius: '2px', overflow: 'hidden' },
+  compFill: { height: '100%', borderRadius: '2px', transition: 'width 0.4s ease' },
+
+  // Group labels
+  groupLabel: {
+    display: 'flex', alignItems: 'center', gap: '6px',
+    padding: '0 24px', marginBottom: '8px',
+  },
+  groupDot: { width: '6px', height: '6px', borderRadius: '50%' },
+  groupText: { fontSize: '0.5rem', letterSpacing: '0.12em', fontWeight: '500' },
+  groupCount: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.06em', marginLeft: 'auto' },
+
+  // Checklist
+  checklistCard: { margin: '0 24px', overflow: 'hidden' },
+  checkRow: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '14px 18px',
+  },
+  checkLeft: { display: 'flex', alignItems: 'center', gap: '14px', cursor: 'pointer', flex: 1 },
+  checkBox: {
+    width: '22px', height: '22px', borderRadius: '7px',
+    border: '1.5px solid var(--border3)', background: 'transparent',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'all 0.2s', flexShrink: 0,
+  },
+  checkBoxOn: { background: 'var(--teal-dim)', borderColor: 'var(--teal-border)' },
+  checkMark: { fontSize: '0.65rem', color: 'var(--teal)', fontWeight: '700' },
+  checkName: { fontSize: '0.88rem', fontWeight: '500', color: 'var(--text)', transition: 'all 0.2s' },
+  checkDose: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.04em', marginTop: '3px' },
+  infoBtn: {
+    width: '30px', height: '30px', borderRadius: '8px',
+    background: 'var(--bg3)', border: '1px solid var(--border2)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    cursor: 'pointer', flexShrink: 0,
+  },
+  infoBtnText: { fontSize: '0.7rem', color: 'var(--cyan)', fontWeight: '600' },
+
+  // Stack list
+  stackList: { display: 'flex', flexDirection: 'column', gap: '8px', padding: '0 24px' },
+  stackCard: { padding: '16px 18px' },
+  stackCardTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' },
+  stackName: { fontSize: '0.92rem', fontWeight: '600', color: 'var(--text)' },
+  stackDose: { fontSize: '0.52rem', color: 'var(--text3)', letterSpacing: '0.04em', marginTop: '3px' },
+  catBadge: { fontSize: '0.42rem', padding: '3px 8px', borderRadius: '5px', border: '1px solid', letterSpacing: '0.08em', textTransform: 'uppercase' },
+  stackMeta: { display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' },
+  stackTiming: { fontSize: '0.52rem', color: 'var(--text3)', letterSpacing: '0.04em' },
+  stackNotes: { fontSize: '0.75rem', color: 'var(--text2)', lineHeight: 1.4 },
+  stackActions: { display: 'flex', gap: '8px' },
+  stackEditBtn: {
+    padding: '7px 14px', borderRadius: '7px', border: '1px solid var(--border)',
+    background: 'transparent', color: 'var(--text3)', fontSize: '0.52rem',
+    letterSpacing: '0.06em', cursor: 'pointer',
+  },
+  stackInfoBtn: {
+    padding: '7px 14px', borderRadius: '7px', border: '1px solid var(--cyan-border)',
+    background: 'var(--cyan-dim)', color: 'var(--cyan)', fontSize: '0.52rem',
+    letterSpacing: '0.06em', cursor: 'pointer',
+  },
+
+  // Explore
+  exploreCard: { margin: '0 24px', padding: '20px', overflow: 'hidden' },
+  exploreHeader: { display: 'flex', gap: '14px', alignItems: 'center', marginBottom: '20px' },
+  exploreOrb: {
+    width: '40px', height: '40px', borderRadius: '12px',
+    background: 'linear-gradient(135deg, rgba(34,211,238,0.15), rgba(45,212,191,0.06))',
+    border: '1px solid var(--cyan-border)',
+    color: 'var(--cyan)', fontFamily: 'var(--font-body)',
+    fontSize: '1rem', fontWeight: '700',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  exploreTitle: { fontSize: '0.95rem', fontWeight: '600', color: '#fff' },
+  exploreSub: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.04em', marginTop: '3px' },
+  exploreInputRow: { display: 'flex', gap: '8px', marginBottom: '16px' },
+  exploreInput: {
+    flex: 1, padding: '12px 14px', borderRadius: '10px',
+    border: '1px solid var(--border2)', background: 'var(--bg3)',
+    color: 'var(--text)', fontSize: '0.85rem', fontFamily: 'var(--font-body)', outline: 'none',
+  },
+  exploreSend: {
+    width: '44px', height: '44px', borderRadius: '10px',
+    background: 'var(--cyan-dim)', border: '1px solid var(--cyan-border)',
+    color: 'var(--cyan)', fontSize: '1.2rem', fontWeight: '700',
+    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontFamily: 'var(--font-body)',
+  },
+  aiLoading: {
+    padding: '20px', textAlign: 'center', fontSize: '0.55rem',
+    color: 'var(--cyan)', letterSpacing: '0.08em',
+    animation: 'pulse 1.5s ease-in-out infinite',
+  },
+  aiResponse: {
+    fontSize: '0.85rem', color: 'var(--text)', lineHeight: 1.7,
+    padding: '16px', background: 'var(--bg3)', borderRadius: '12px',
+    border: '1px solid var(--border)', whiteSpace: 'pre-wrap',
+  },
+  promptGrid: { display: 'flex', flexDirection: 'column', gap: '6px' },
+  promptChip: {
+    padding: '10px 14px', background: 'rgba(255,255,255,0.03)',
+    border: '1px solid var(--border)', borderRadius: '8px',
+    fontSize: '0.78rem', color: 'var(--text3)', cursor: 'pointer', transition: 'all 0.15s',
+  },
+
+  // Empty
+  emptyCard: { margin: '0 24px', padding: '40px 20px', textAlign: 'center' },
   emptyText: { fontSize: '0.6rem', color: 'var(--text3)', letterSpacing: '0.06em', marginBottom: '6px' },
   emptyHint: { fontSize: '0.72rem', color: 'var(--text3)', opacity: 0.6 },
 
-  mealList: { display: 'flex', flexDirection: 'column', gap: '8px', padding: '0 24px' },
-  mealCard: { padding: '14px 16px' },
-  mealTop: { marginBottom: '10px' },
-  mealType: { fontSize: '0.48rem', color: 'var(--orange)', letterSpacing: '0.1em', marginBottom: '4px' },
-  mealDesc: { fontSize: '0.9rem', fontWeight: '500', color: 'var(--text)' },
-  mealMacros: { display: 'flex', gap: '16px' },
-  mealMacro: { fontSize: '0.52rem', color: 'var(--text3)', letterSpacing: '0.04em' },
-
-  recentCard: { margin: '0 24px', overflow: 'hidden' },
-  recentRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px' },
-  recentDate: { fontSize: '0.85rem', fontWeight: '500', color: 'var(--text)' },
-  recentMeals: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.04em', marginTop: '3px' },
-  recentMacros: { display: 'flex', gap: '14px', alignItems: 'center' },
-  recentVal: { fontSize: '0.6rem', fontWeight: '500', letterSpacing: '0.02em' },
-
+  // Modal
   modalOverlay: {
     position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
     backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
-    zIndex: 400, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+    zIndex: 500, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
   },
   modal: {
     width: '100%', maxWidth: '480px', background: 'var(--bg2)',
     border: '1px solid var(--border2)', borderRadius: '20px 20px 0 0',
-    maxHeight: '80vh', overflowY: 'auto',
+    maxHeight: '85vh', overflowY: 'auto',
   },
   modalHeader: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 20px 12px',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '20px 20px 12px',
   },
   modalTitle: { fontSize: '1rem', fontWeight: '700', color: '#fff' },
+  modalSub: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.06em', marginTop: '4px' },
   modalClose: {
     width: '28px', height: '28px', borderRadius: '7px', background: 'transparent',
     border: 'none', position: 'relative', cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-
-  typeRow: { display: 'flex', gap: '6px', padding: '0 20px 16px' },
-  typeBtn: {
-    flex: 1, padding: '10px 0', borderRadius: '8px', border: '1px solid var(--border)',
-    background: 'var(--bg3)', color: 'var(--text3)', fontSize: '0.72rem', fontWeight: '500',
-    cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s',
+  aiModalBody: { padding: '0 20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' },
+  aiModalResponse: { fontSize: '0.85rem', color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap' },
+  followUp: { display: 'flex', gap: '8px' },
+  followUpInput: {
+    flex: 1, padding: '11px 14px', borderRadius: '10px',
+    border: '1px solid var(--border2)', background: 'var(--bg3)',
+    color: 'var(--text)', fontSize: '0.82rem', fontFamily: 'var(--font-body)', outline: 'none',
+  },
+  followUpSend: {
+    width: '40px', height: '40px', borderRadius: '10px',
+    background: 'var(--cyan-dim)', border: '1px solid var(--cyan-border)',
+    color: 'var(--cyan)', fontSize: '1.1rem', fontWeight: '700',
+    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
     fontFamily: 'var(--font-body)',
   },
-  typeBtnActive: {
-    background: 'var(--orange-dim)', borderColor: 'var(--orange-border)', color: 'var(--orange)',
-  },
 
+  // Form
   formBody: { padding: '0 20px 24px', display: 'flex', flexDirection: 'column', gap: '12px' },
-  formLabel: {
-    fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.1em',
-    textTransform: 'uppercase', marginBottom: '-4px',
-  },
+  formLabel: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '-4px' },
+  formRow: { display: 'flex', gap: '10px' },
+  formHalf: { flex: 1 },
   input: {
-    width: '100%', padding: '14px 16px', borderRadius: '10px',
+    width: '100%', padding: '12px 14px', borderRadius: '10px',
     border: '1px solid var(--border2)', background: 'var(--bg3)',
-    color: 'var(--text)', fontSize: '0.9rem', fontFamily: 'var(--font-body)',
-    outline: 'none',
+    color: 'var(--text)', fontSize: '0.88rem', fontFamily: 'var(--font-body)', outline: 'none',
   },
-  macroInputs: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px' },
-  macroInputWrap: { display: 'flex', flexDirection: 'column', gap: '4px' },
-  inputLabel: { fontSize: '0.42rem', color: 'var(--text3)', letterSpacing: '0.1em', textTransform: 'uppercase', textAlign: 'center' },
-  inputSm: {
-    width: '100%', padding: '10px 8px', borderRadius: '8px',
-    border: '1px solid var(--border2)', background: 'var(--bg3)',
-    color: 'var(--text)', fontSize: '0.82rem', textAlign: 'center', outline: 'none',
-    fontFamily: 'var(--font-mono)',
+  catRow: { display: 'flex', flexWrap: 'wrap', gap: '5px' },
+  catChip: {
+    padding: '7px 12px', borderRadius: '7px', border: '1px solid var(--border)',
+    background: 'transparent', color: 'var(--text3)', fontSize: '0.65rem',
+    fontWeight: '500', cursor: 'pointer', fontFamily: 'var(--font-body)',
+    textTransform: 'capitalize', transition: 'all 0.15s',
   },
-
-  saveToggleRow: {
-    display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '4px 0',
-  },
-  toggleBox: {
-    width: '20px', height: '20px', borderRadius: '6px',
-    border: '1.5px solid var(--border3)', background: 'transparent',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    transition: 'all 0.15s', flexShrink: 0,
-  },
-  toggleBoxOn: { background: 'var(--orange-dim)', borderColor: 'var(--orange-border)' },
-  toggleCheck: { fontSize: '0.6rem', color: 'var(--orange)', fontWeight: '700' },
-  saveToggleLabel: { fontSize: '0.78rem', color: 'var(--text2)', fontWeight: '500' },
-
-  formHint: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.04em', textAlign: 'center', opacity: 0.7 },
+  catChipActive: { background: 'var(--cyan-dim)', borderColor: 'var(--cyan-border)', color: 'var(--cyan)' },
   saveBtn: {
-    width: '100%', padding: '15px', borderRadius: '12px',
-    border: '1px solid var(--orange-border)',
-    background: 'linear-gradient(135deg, rgba(251,146,60,0.10), rgba(251,146,60,0.04))',
-    color: 'var(--orange)', fontFamily: 'var(--font-body)',
+    width: '100%', padding: '15px', marginTop: '4px', borderRadius: '12px',
+    border: '1px solid var(--cyan-border)',
+    background: 'linear-gradient(135deg, rgba(34,211,238,0.10), rgba(45,212,191,0.05))',
+    color: 'var(--cyan)', fontFamily: 'var(--font-body)',
     fontSize: '0.88rem', fontWeight: '600', cursor: 'pointer',
   },
   deleteBtn: {
@@ -681,7 +736,6 @@ const s = {
     border: '1px solid rgba(248,113,113,0.2)',
     background: 'rgba(248,113,113,0.04)',
     color: 'var(--red)', fontFamily: 'var(--font-mono)',
-    fontSize: '0.6rem', fontWeight: '500', cursor: 'pointer',
-    letterSpacing: '0.04em',
+    fontSize: '0.6rem', fontWeight: '500', cursor: 'pointer', letterSpacing: '0.04em',
   },
 }
