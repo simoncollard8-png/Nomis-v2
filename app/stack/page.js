@@ -1,10 +1,8 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Shell from '../../components/Shell'
 import NomisChat from '../../components/NomisChat'
 import { dbRead, dbWrite, chat } from '../../lib/api'
-
-const CATEGORIES = ['All', 'Supplement', 'Peptide', 'Vitamin', 'Mineral', 'Amino']
 
 export default function Stack() {
   const [stack, setStack]           = useState([])
@@ -28,14 +26,12 @@ export default function Stack() {
 
   const today = new Date().toISOString().split('T')[0]
 
-  useEffect(() => { loadData() }, [])
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
       const [stackData, logData] = await Promise.all([
         dbRead('supplement_stack', {}, { order: 'name', limit: 50 }),
-        dbRead('supplement_logs', { date: today }, { limit: 50 }),
+        dbRead('supplement_logs', { date: today }, { limit: 100 }),
       ])
       setStack((stackData || []).filter(s => s.active !== false))
       setLogs(logData || [])
@@ -43,31 +39,52 @@ export default function Stack() {
       console.error('Stack load error:', err)
     }
     setLoading(false)
+  }, [today])
+
+  useEffect(() => { loadData() }, [loadData])
+
+  function isTaken(supp) {
+    return logs.some(l =>
+      String(l.supplement_id) === String(supp.id) ||
+      l.name?.toLowerCase().trim() === supp.name?.toLowerCase().trim()
+    )
+  }
+
+  function getLogForSupp(supp) {
+    return logs.find(l =>
+      String(l.supplement_id) === String(supp.id) ||
+      l.name?.toLowerCase().trim() === supp.name?.toLowerCase().trim()
+    )
   }
 
   async function toggleTaken(supp) {
-    const existing = logs.find(l => l.supplement_id === supp.id || l.name === supp.name)
+    const existing = getLogForSupp(supp)
     try {
       if (existing) {
+        // Untake — delete the log
         await dbWrite('supplement_logs', 'delete', {}, { id: existing.id })
+        // Update local state immediately
+        setLogs(prev => prev.filter(l => l.id !== existing.id))
         notify(`${supp.name} unmarked`)
       } else {
-        await dbWrite('supplement_logs', 'insert', {
+        // Take — insert log
+        const result = await dbWrite('supplement_logs', 'insert', {
           supplement_id: supp.id,
           name: supp.name,
           date: today,
           taken: true,
         })
+        // Update local state immediately
+        const newLog = result?.data?.[0] || { id: Date.now(), supplement_id: supp.id, name: supp.name, date: today, taken: true }
+        setLogs(prev => [...prev, newLog])
         notify(`${supp.name} taken`)
       }
-      await loadData()
     } catch (err) {
       console.error('Toggle error:', err)
+      notify('Failed to update')
+      // Reload from DB on error
+      await loadData()
     }
-  }
-
-  function isTaken(supp) {
-    return logs.some(l => l.supplement_id === supp.id || l.name === supp.name)
   }
 
   function openAdd() {
@@ -148,7 +165,7 @@ Question: ${query}
 
       const res = await chat(fullQuery, [])
       setAiResponse(res.response || 'No response from NOMIS.')
-    } catch (err) {
+    } catch {
       setAiResponse('Connection error. Try again.')
     }
     setAiLoading(false)
@@ -162,13 +179,6 @@ Question: ${query}
     askNomis(`Tell me about ${supp.name}. What does it do, how does it help my goals, optimal dosing and timing, any interactions with my other supplements?`)
   }
 
-  function openExplore() {
-    setSelectedSupp(null)
-    setShowAI(true)
-    setAiQuery('')
-    setAiResponse(null)
-  }
-
   function notify(msg) {
     setToast(msg)
     setTimeout(() => setToast(null), 2000)
@@ -180,6 +190,21 @@ Question: ${query}
 
   const takenCount = stack.filter(s => isTaken(s)).length
   const compliance = stack.length ? Math.round((takenCount / stack.length) * 100) : 0
+
+  // Group by timing
+  const morningItems = stack.filter(s => s.timing?.toLowerCase().includes('morning'))
+  const afternoonItems = stack.filter(s => s.timing?.toLowerCase().includes('afternoon') || s.timing?.toLowerCase().includes('lunch'))
+  const eveningItems = stack.filter(s => s.timing?.toLowerCase().includes('evening') || s.timing?.toLowerCase().includes('9pm') || s.timing?.toLowerCase().includes('8:30'))
+  const otherItems = stack.filter(s =>
+    !morningItems.includes(s) && !afternoonItems.includes(s) && !eveningItems.includes(s)
+  )
+
+  const timeGroups = [
+    { label: 'Morning', items: morningItems, color: 'var(--orange)' },
+    { label: 'Afternoon', items: afternoonItems, color: 'var(--cyan)' },
+    { label: 'Evening', items: eveningItems, color: '#a78bfa' },
+    { label: 'Other', items: otherItems, color: 'var(--text3)' },
+  ].filter(g => g.items.length > 0)
 
   const tabs = [
     { key: 'today', label: 'Today' },
@@ -223,18 +248,28 @@ Question: ${query}
               <div className="section-label" style={s.sLabel}>Daily compliance</div>
               <div className="card" style={s.compCard}>
                 <div style={s.compTop}>
-                  <div style={s.compNum} className="mono">
-                    <span style={{ color: compliance === 100 ? 'var(--teal)' : compliance > 50 ? 'var(--cyan)' : 'var(--orange)' }}>{compliance}%</span>
+                  <div style={s.compLeft}>
+                    <span style={{
+                      ...s.compNum,
+                      color: compliance === 100 ? 'var(--teal)' : compliance > 50 ? 'var(--cyan)' : 'var(--orange)',
+                    }} className="mono">{compliance}%</span>
+                    {compliance === 100 && <span style={s.compComplete} className="mono">ALL TAKEN</span>}
                   </div>
-                  <div style={s.compMeta} className="mono">{takenCount} of {stack.length} taken</div>
+                  <div style={s.compMeta} className="mono">{takenCount} of {stack.length}</div>
                 </div>
                 <div style={s.compBar}>
-                  <div style={{ ...s.compFill, width: `${compliance}%` }} />
+                  <div style={{
+                    ...s.compFill,
+                    width: `${compliance}%`,
+                    background: compliance === 100
+                      ? 'linear-gradient(90deg, var(--teal), var(--cyan))'
+                      : 'linear-gradient(90deg, var(--cyan), var(--teal))',
+                  }} />
                 </div>
               </div>
             </div>
 
-            {/* Checklist */}
+            {/* Grouped checklist */}
             <div style={s.section}>
               <div style={s.sectionHeader}>
                 <span className="section-label">Checklist</span>
@@ -247,37 +282,50 @@ Question: ${query}
                   <div style={s.emptyHint}>Tap "+ Add" to build your stack, or explore below</div>
                 </div>
               ) : (
-                <div className="card" style={s.checklistCard}>
-                  {stack.map((supp, i) => {
-                    const taken = isTaken(supp)
-                    return (
-                      <div key={supp.id} style={{
-                        ...s.checkRow,
-                        borderBottom: i < stack.length - 1 ? '1px solid var(--border)' : 'none',
-                      }}>
-                        {/* Toggle */}
-                        <div style={s.checkLeft} onClick={() => toggleTaken(supp)}>
-                          <div style={{
-                            ...s.checkBox,
-                            ...(taken ? s.checkBoxOn : {}),
+                timeGroups.map(group => (
+                  <div key={group.label} style={{ marginBottom: '12px' }}>
+                    <div style={s.groupLabel}>
+                      <div style={{ ...s.groupDot, background: group.color }} />
+                      <span className="mono" style={{ ...s.groupText, color: group.color }}>{group.label.toUpperCase()}</span>
+                      <span className="mono" style={s.groupCount}>
+                        {group.items.filter(i => isTaken(i)).length}/{group.items.length}
+                      </span>
+                    </div>
+                    <div className="card" style={s.checklistCard}>
+                      {group.items.map((supp, i) => {
+                        const taken = isTaken(supp)
+                        return (
+                          <div key={supp.id} style={{
+                            ...s.checkRow,
+                            borderBottom: i < group.items.length - 1 ? '1px solid var(--border)' : 'none',
                           }}>
-                            {taken && <span style={s.checkMark}>✓</span>}
-                          </div>
-                          <div style={{ opacity: taken ? 0.5 : 1, transition: 'opacity 0.15s' }}>
-                            <div style={s.checkName}>{supp.name}</div>
-                            <div style={s.checkDose} className="mono">
-                              {[supp.dose, supp.timing].filter(Boolean).join(' · ') || supp.category}
+                            <div style={s.checkLeft} onClick={() => toggleTaken(supp)}>
+                              <div style={{
+                                ...s.checkBox,
+                                ...(taken ? s.checkBoxOn : {}),
+                              }}>
+                                {taken && <span style={s.checkMark}>✓</span>}
+                              </div>
+                              <div style={{ opacity: taken ? 0.45 : 1, transition: 'opacity 0.2s' }}>
+                                <div style={{
+                                  ...s.checkName,
+                                  textDecoration: taken ? 'line-through' : 'none',
+                                  textDecorationColor: 'var(--text3)',
+                                }}>{supp.name}</div>
+                                <div style={s.checkDose} className="mono">
+                                  {supp.dose || supp.category}
+                                </div>
+                              </div>
                             </div>
+                            <button style={s.infoBtn} onClick={() => openSuppInfo(supp)}>
+                              <span style={s.infoBtnText} className="mono">?</span>
+                            </button>
                           </div>
-                        </div>
-                        {/* Info button */}
-                        <button style={s.infoBtn} onClick={() => openSuppInfo(supp)}>
-                          <span style={s.infoBtnText} className="mono">?</span>
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </>
@@ -302,16 +350,14 @@ Question: ${query}
                     <div style={s.stackCardTop}>
                       <div>
                         <div style={s.stackName}>{supp.name}</div>
-                        <div style={s.stackDose} className="mono">
-                          {supp.dose || 'No dose set'}
-                        </div>
+                        <div style={s.stackDose} className="mono">{supp.dose || 'No dose set'}</div>
                       </div>
-                      <span className="badge" style={{
+                      <span style={{
                         ...s.catBadge,
                         color: supp.category === 'peptide' ? '#a78bfa' : 'var(--cyan)',
                         background: supp.category === 'peptide' ? 'rgba(167,139,250,0.08)' : 'var(--cyan-dim)',
                         borderColor: supp.category === 'peptide' ? 'rgba(167,139,250,0.2)' : 'var(--cyan-border)',
-                      }}>{supp.category}</span>
+                      }} className="mono">{supp.category}</span>
                     </div>
                     <div style={s.stackMeta}>
                       {supp.timing && <span className="mono" style={s.stackTiming}>{supp.timing}</span>}
@@ -361,12 +407,9 @@ Question: ${query}
               )}
 
               {aiResponse && !aiLoading && (
-                <div style={s.aiResponse}>
-                  {aiResponse}
-                </div>
+                <div style={s.aiResponse}>{aiResponse}</div>
               )}
 
-              {/* Quick prompts */}
               {!aiResponse && !aiLoading && (
                 <div style={s.promptGrid}>
                   {[
@@ -377,11 +420,7 @@ Question: ${query}
                     'Creatine timing and dosage?',
                     'How do my current supplements interact?',
                   ].map((prompt, i) => (
-                    <div
-                      key={i}
-                      style={s.promptChip}
-                      onClick={() => { setAiQuery(prompt); askNomis(prompt) }}
-                    >
+                    <div key={i} style={s.promptChip} onClick={() => { setAiQuery(prompt); askNomis(prompt) }}>
                       {prompt}
                     </div>
                   ))}
@@ -405,16 +444,9 @@ Question: ${query}
                   <span style={{ position: 'absolute', width: '14px', height: '1.5px', background: 'var(--text3)', transform: 'rotate(-45deg)' }} />
                 </button>
               </div>
-
               <div style={s.aiModalBody}>
-                {aiLoading && (
-                  <div style={s.aiLoading} className="mono">NOMIS is researching...</div>
-                )}
-                {aiResponse && !aiLoading && (
-                  <div style={s.aiModalResponse}>{aiResponse}</div>
-                )}
-
-                {/* Follow-up */}
+                {aiLoading && <div style={s.aiLoading} className="mono">NOMIS is researching...</div>}
+                {aiResponse && !aiLoading && <div style={s.aiModalResponse}>{aiResponse}</div>}
                 <div style={s.followUp}>
                   <input
                     style={s.followUpInput}
@@ -445,7 +477,6 @@ Question: ${query}
                   <span style={{ position: 'absolute', width: '14px', height: '1.5px', background: 'var(--text3)', transform: 'rotate(-45deg)' }} />
                 </button>
               </div>
-
               <div style={s.formBody}>
                 <div style={s.formLabel} className="mono">Name</div>
                 <input style={s.input} placeholder="e.g. Creatine Monohydrate" value={form.name} onChange={e => updateForm('name', e.target.value)} />
@@ -483,9 +514,7 @@ Question: ${query}
                 </button>
 
                 {editing && (
-                  <button style={s.deleteBtn} onClick={handleDelete}>
-                    Remove from stack
-                  </button>
+                  <button style={s.deleteBtn} onClick={handleDelete}>Remove from stack</button>
                 )}
               </div>
             </div>
@@ -512,19 +541,13 @@ const s = {
     boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
   },
 
-  // Tabs
-  tabBar: {
-    display: 'flex', gap: '4px', padding: '16px 24px 24px',
-  },
+  tabBar: { display: 'flex', gap: '4px', padding: '16px 24px 24px' },
   tab: {
     padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border)',
     background: 'transparent', color: 'var(--text3)', fontSize: '0.75rem',
-    fontWeight: '500', cursor: 'pointer', fontFamily: 'var(--font-body)',
-    transition: 'all 0.15s',
+    fontWeight: '500', cursor: 'pointer', fontFamily: 'var(--font-body)', transition: 'all 0.15s',
   },
-  tabActive: {
-    background: 'var(--cyan-dim)', borderColor: 'var(--cyan-border)', color: 'var(--cyan)',
-  },
+  tabActive: { background: 'var(--cyan-dim)', borderColor: 'var(--cyan-border)', color: 'var(--cyan)' },
 
   addSmBtn: {
     padding: '5px 12px', borderRadius: '6px', border: '1px solid var(--cyan-border)',
@@ -535,14 +558,21 @@ const s = {
   // Compliance
   compCard: { margin: '0 24px', padding: '20px', overflow: 'hidden' },
   compTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
+  compLeft: { display: 'flex', alignItems: 'center', gap: '10px' },
   compNum: { fontSize: '1.5rem', fontWeight: '700', lineHeight: 1 },
+  compComplete: { fontSize: '0.48rem', color: 'var(--teal)', letterSpacing: '0.1em' },
   compMeta: { fontSize: '0.52rem', color: 'var(--text3)', letterSpacing: '0.06em' },
   compBar: { height: '4px', background: 'rgba(255,255,255,0.04)', borderRadius: '2px', overflow: 'hidden' },
-  compFill: {
-    height: '100%', borderRadius: '2px',
-    background: 'linear-gradient(90deg, var(--cyan), var(--teal))',
-    transition: 'width 0.3s ease',
+  compFill: { height: '100%', borderRadius: '2px', transition: 'width 0.4s ease' },
+
+  // Group labels
+  groupLabel: {
+    display: 'flex', alignItems: 'center', gap: '6px',
+    padding: '0 24px', marginBottom: '8px',
   },
+  groupDot: { width: '6px', height: '6px', borderRadius: '50%' },
+  groupText: { fontSize: '0.5rem', letterSpacing: '0.12em', fontWeight: '500' },
+  groupCount: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.06em', marginLeft: 'auto' },
 
   // Checklist
   checklistCard: { margin: '0 24px', overflow: 'hidden' },
@@ -555,13 +585,11 @@ const s = {
     width: '22px', height: '22px', borderRadius: '7px',
     border: '1.5px solid var(--border3)', background: 'transparent',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    transition: 'all 0.15s', flexShrink: 0,
+    transition: 'all 0.2s', flexShrink: 0,
   },
-  checkBoxOn: {
-    background: 'var(--teal-dim)', borderColor: 'var(--teal-border)',
-  },
+  checkBoxOn: { background: 'var(--teal-dim)', borderColor: 'var(--teal-border)' },
   checkMark: { fontSize: '0.65rem', color: 'var(--teal)', fontWeight: '700' },
-  checkName: { fontSize: '0.88rem', fontWeight: '500', color: 'var(--text)' },
+  checkName: { fontSize: '0.88rem', fontWeight: '500', color: 'var(--text)', transition: 'all 0.2s' },
   checkDose: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.04em', marginTop: '3px' },
   infoBtn: {
     width: '30px', height: '30px', borderRadius: '8px',
@@ -610,8 +638,7 @@ const s = {
   exploreInput: {
     flex: 1, padding: '12px 14px', borderRadius: '10px',
     border: '1px solid var(--border2)', background: 'var(--bg3)',
-    color: 'var(--text)', fontSize: '0.85rem', fontFamily: 'var(--font-body)',
-    outline: 'none',
+    color: 'var(--text)', fontSize: '0.85rem', fontFamily: 'var(--font-body)', outline: 'none',
   },
   exploreSend: {
     width: '44px', height: '44px', borderRadius: '10px',
@@ -628,15 +655,13 @@ const s = {
   aiResponse: {
     fontSize: '0.85rem', color: 'var(--text)', lineHeight: 1.7,
     padding: '16px', background: 'var(--bg3)', borderRadius: '12px',
-    border: '1px solid var(--border)',
-    whiteSpace: 'pre-wrap',
+    border: '1px solid var(--border)', whiteSpace: 'pre-wrap',
   },
   promptGrid: { display: 'flex', flexDirection: 'column', gap: '6px' },
   promptChip: {
     padding: '10px 14px', background: 'rgba(255,255,255,0.03)',
     border: '1px solid var(--border)', borderRadius: '8px',
-    fontSize: '0.78rem', color: 'var(--text3)', cursor: 'pointer',
-    transition: 'all 0.15s',
+    fontSize: '0.78rem', color: 'var(--text3)', cursor: 'pointer', transition: 'all 0.15s',
   },
 
   // Empty
@@ -656,8 +681,7 @@ const s = {
     maxHeight: '85vh', overflowY: 'auto',
   },
   modalHeader: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-    padding: '20px 20px 12px',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '20px 20px 12px',
   },
   modalTitle: { fontSize: '1rem', fontWeight: '700', color: '#fff' },
   modalSub: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.06em', marginTop: '4px' },
@@ -666,19 +690,13 @@ const s = {
     border: 'none', position: 'relative', cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-
-  // AI Modal body
   aiModalBody: { padding: '0 20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' },
-  aiModalResponse: {
-    fontSize: '0.85rem', color: 'var(--text)', lineHeight: 1.7,
-    whiteSpace: 'pre-wrap',
-  },
+  aiModalResponse: { fontSize: '0.85rem', color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap' },
   followUp: { display: 'flex', gap: '8px' },
   followUpInput: {
     flex: 1, padding: '11px 14px', borderRadius: '10px',
     border: '1px solid var(--border2)', background: 'var(--bg3)',
-    color: 'var(--text)', fontSize: '0.82rem', fontFamily: 'var(--font-body)',
-    outline: 'none',
+    color: 'var(--text)', fontSize: '0.82rem', fontFamily: 'var(--font-body)', outline: 'none',
   },
   followUpSend: {
     width: '40px', height: '40px', borderRadius: '10px',
@@ -690,17 +708,13 @@ const s = {
 
   // Form
   formBody: { padding: '0 20px 24px', display: 'flex', flexDirection: 'column', gap: '12px' },
-  formLabel: {
-    fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.1em',
-    textTransform: 'uppercase', marginBottom: '-4px',
-  },
+  formLabel: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '-4px' },
   formRow: { display: 'flex', gap: '10px' },
   formHalf: { flex: 1 },
   input: {
     width: '100%', padding: '12px 14px', borderRadius: '10px',
     border: '1px solid var(--border2)', background: 'var(--bg3)',
-    color: 'var(--text)', fontSize: '0.88rem', fontFamily: 'var(--font-body)',
-    outline: 'none',
+    color: 'var(--text)', fontSize: '0.88rem', fontFamily: 'var(--font-body)', outline: 'none',
   },
   catRow: { display: 'flex', flexWrap: 'wrap', gap: '5px' },
   catChip: {
@@ -709,9 +723,7 @@ const s = {
     fontWeight: '500', cursor: 'pointer', fontFamily: 'var(--font-body)',
     textTransform: 'capitalize', transition: 'all 0.15s',
   },
-  catChipActive: {
-    background: 'var(--cyan-dim)', borderColor: 'var(--cyan-border)', color: 'var(--cyan)',
-  },
+  catChipActive: { background: 'var(--cyan-dim)', borderColor: 'var(--cyan-border)', color: 'var(--cyan)' },
   saveBtn: {
     width: '100%', padding: '15px', marginTop: '4px', borderRadius: '12px',
     border: '1px solid var(--cyan-border)',
@@ -724,7 +736,6 @@ const s = {
     border: '1px solid rgba(248,113,113,0.2)',
     background: 'rgba(248,113,113,0.04)',
     color: 'var(--red)', fontFamily: 'var(--font-mono)',
-    fontSize: '0.6rem', fontWeight: '500', cursor: 'pointer',
-    letterSpacing: '0.04em',
+    fontSize: '0.6rem', fontWeight: '500', cursor: 'pointer', letterSpacing: '0.04em',
   },
 }
