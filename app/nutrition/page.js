@@ -175,7 +175,7 @@ export default function Nutrition() {
     setSaving(true)
     try {
       await logNutrition({
-        date: new Date().toISOString().split('T')[0],
+        date: getLocalDate(),
         meal: meal.toLowerCase(),
         description: desc,
         calories: calories || null,
