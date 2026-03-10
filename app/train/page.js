@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import Shell from '../../components/Shell'
 import NomisChat from '../../components/NomisChat'
 import { getTodaysWorkout, startWorkout, saveSets, checkAndSavePR, dbRead, dbWrite, getExerciseInfo, suggestExercises } from '../../lib/api'
@@ -48,13 +49,15 @@ const COMMON_EXERCISES = [
 ]
 
 export default function Train() {
+  const router = useRouter()
+
   const [workout, setWorkout]           = useState(null)
   const [workoutId, setWorkoutId]       = useState(null)
   const [exercises, setExercises]       = useState([])
   const [activeIdx, setActiveIdx]       = useState(null)
   const [setData, setSetData]           = useState({})
   const [completedEx, setCompletedEx]   = useState({})
-  const [editingEx, setEditingEx]       = useState({}) // track which are in edit mode after logging
+  const [editingEx, setEditingEx]       = useState({})
   const [loading, setLoading]           = useState(true)
   const [saving, setSaving]             = useState(false)
   const [prToast, setPrToast]           = useState(null)
@@ -248,7 +251,6 @@ export default function Train() {
 
   function toggleEditMode(exId) {
     setEditingEx(prev => ({ ...prev, [exId]: !prev[exId] }))
-    // Remove from completed when entering edit mode
     if (!editingEx[exId]) {
       setCompletedEx(prev => { const n = { ...prev }; delete n[exId]; return n })
     }
@@ -297,23 +299,19 @@ export default function Train() {
   async function handleCompleteSession() {
     if (completedCount === 0 || completeSaving || sessionComplete) return
     setCompleteSaving(true)
-
     try {
       let wid = workoutId
       if (!wid) wid = await handleStart()
-
       if (wid) {
         const durationMin = sessionStart
           ? Math.round((Date.now() - sessionStart) / 60000)
           : null
-
         await dbWrite('workouts', 'update', {
           feeling: null,
           duration_min: durationMin,
           description: exercises.map(e => e.name).join(', '),
         }, { id: wid })
       }
-
       setSessionComplete(true)
     } catch (err) {
       console.error('Complete session error:', err)
@@ -342,6 +340,16 @@ export default function Train() {
     setSessionStart(null)
     setElapsed('00:00:00')
     loadWorkout()
+  }
+
+  // Pass workout data to Lift Mode via sessionStorage so it can load exercises
+  function enterLiftMode() {
+    sessionStorage.setItem('liftMode_workout', JSON.stringify({
+      workout,
+      exercises,
+      setData,
+    }))
+    router.push('/lift')
   }
 
   const completedCount = Object.keys(completedEx).length
@@ -388,7 +396,6 @@ export default function Train() {
               <div style={s.completeSub} className="mono">
                 {workout?.muscle_group} — {completedCount} exercise{completedCount !== 1 ? 's' : ''} — {elapsed}
               </div>
-
               <div style={s.completeSummary}>
                 <div style={s.completeStat}>
                   <div style={{ ...s.completeStatVal, color: 'var(--cyan)' }} className="mono">{completedCount}</div>
@@ -418,10 +425,7 @@ export default function Train() {
                   <div style={s.completeStatLabel} className="mono">Volume (lbs)</div>
                 </div>
               </div>
-
-              <button style={s.completeDoneBtn} onClick={resetSession}>
-                Done
-              </button>
+              <button style={s.completeDoneBtn} onClick={resetSession}>Done</button>
             </div>
           </div>
         )}
@@ -509,6 +513,30 @@ export default function Train() {
           )}
         </div>
 
+        {/* ── LIFT MODE BUTTON ── only shows today + has exercises */}
+        {exercises.length > 0 && isToday && !sessionComplete && (
+          <div style={s.liftModeSection}>
+            <button style={s.liftModeBtn} onClick={enterLiftMode}>
+              <div style={s.liftModeBtnInner}>
+                <div style={s.liftModeIcon}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M4 12h3m10 0h3M7 12V9a5 5 0 0 1 10 0v3M7 12v3a5 5 0 0 0 10 0v-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </div>
+                <div>
+                  <div style={s.liftModeBtnLabel}>Enter Lift Mode</div>
+                  <div style={s.liftModeBtnSub} className="mono">
+                    Full screen · Voice · Coached rest timers
+                  </div>
+                </div>
+              </div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, opacity: 0.5 }}>
+                <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        )}
+
         {/* Rest day */}
         {workout?.isRest && (
           <div style={s.restCard} className="card">
@@ -573,11 +601,8 @@ export default function Train() {
                     </div>
                   </div>
 
-                  {/* Expanded panel */}
                   {isActive && (
                     <div style={s.expandedPanel} className="animate-fadeIn">
-
-                      {/* Action row — edit + delete always visible */}
                       <div style={s.actionRow}>
                         {isDone && (
                           <button
@@ -599,7 +624,6 @@ export default function Train() {
                         </button>
                       </div>
 
-                      {/* Exercise info */}
                       <div style={s.infoSection}>
                         {isInfoLoading ? (
                           <div className="mono" style={{ fontSize: '0.52rem', color: 'var(--text3)', letterSpacing: '0.08em' }}>
@@ -625,9 +649,7 @@ export default function Train() {
                                 ))}
                               </div>
                             )}
-                            {info.tip && (
-                              <div style={s.tipBox}>{info.tip}</div>
-                            )}
+                            {info.tip && <div style={s.tipBox}>{info.tip}</div>}
                           </>
                         ) : (
                           <div className="mono" style={{ fontSize: '0.52rem', color: 'var(--text3)' }}>
@@ -638,7 +660,6 @@ export default function Train() {
 
                       <div style={s.divider} />
 
-                      {/* Set logger — shown when not done, or when editing */}
                       {showLogger && (
                         <>
                           <div style={s.setHeader} className="mono">
@@ -659,22 +680,16 @@ export default function Train() {
                                 value={set.reps}
                                 onChange={e => updateSet(ex.id, si, 'reps', e.target.value)}
                               />
-                              <button
-                                style={s.removeSetBtn}
-                                onClick={() => removeSet(ex.id, si)}
-                              >
+                              <button style={s.removeSetBtn} onClick={() => removeSet(ex.id, si)}>
                                 <span style={{ fontSize: '0.75rem', color: 'var(--text3)', lineHeight: 1 }}>×</span>
                               </button>
                             </div>
                           ))}
-
-                          {/* Add set row */}
                           <button style={s.addSetBtn} onClick={() => addSet(ex.id)}>
                             <span className="mono" style={{ fontSize: '0.5rem', letterSpacing: '0.08em', color: 'var(--text3)' }}>
                               + ADD SET
                             </span>
                           </button>
-
                           <button
                             style={{ ...s.logBtn, opacity: saving ? 0.5 : 1 }}
                             onClick={() => handleCompleteExercise(ex)}
@@ -696,7 +711,6 @@ export default function Train() {
               )
             })}
 
-            {/* Add exercise */}
             <div style={s.addCard} onClick={handleAddExercise}>
               <span className="mono" style={{ fontSize: '0.85rem', color: 'var(--text3)', fontWeight: '300' }}>+</span>
               <span style={{ fontSize: '0.82rem', color: 'var(--text3)' }}>Add exercise</span>
@@ -716,7 +730,6 @@ export default function Train() {
                 </button>
               </div>
 
-              {/* Search bar */}
               <div style={s.searchWrapper}>
                 <div style={s.searchBar}>
                   <span style={s.searchIcon} className="mono">⌕</span>
@@ -735,8 +748,6 @@ export default function Train() {
                     </button>
                   )}
                 </div>
-
-                {/* Add custom button when typing something not in list */}
                 {searchQuery.trim() && searchResults.length === 0 && (
                   <button style={s.customAddBtn} onClick={addCustomExercise}>
                     <span style={{ fontSize: '0.82rem', color: 'var(--text)', fontWeight: '500' }}>
@@ -750,7 +761,6 @@ export default function Train() {
               </div>
 
               <div style={s.suggestionList}>
-                {/* Search results take priority */}
                 {searchQuery.trim() ? (
                   searchResults.length > 0 ? (
                     <>
@@ -768,7 +778,6 @@ export default function Train() {
                           <span className="mono" style={{ fontSize: '0.65rem', color: 'var(--cyan)', flexShrink: 0 }}>+</span>
                         </div>
                       ))}
-                      {/* Still show custom add at bottom of search results */}
                       <button style={{ ...s.customAddBtn, marginTop: '8px' }} onClick={addCustomExercise}>
                         <span style={{ fontSize: '0.82rem', color: 'var(--text)', fontWeight: '500' }}>
                           Add "{searchQuery.trim()}" as custom
@@ -846,10 +855,7 @@ const s = {
     zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center',
     padding: '24px',
   },
-  completeCard: {
-    width: '100%', maxWidth: '380px', padding: '40px 28px 32px',
-    textAlign: 'center',
-  },
+  completeCard: { width: '100%', maxWidth: '380px', padding: '40px 28px 32px', textAlign: 'center' },
   completeIcon: {
     width: '56px', height: '56px', borderRadius: '16px',
     background: 'var(--teal-dim)', border: '1px solid var(--teal-border)',
@@ -857,27 +863,12 @@ const s = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     margin: '0 auto 20px',
   },
-  completeTitle: {
-    fontSize: '1.3rem', fontWeight: '700', color: '#fff',
-    marginBottom: '8px',
-  },
-  completeSub: {
-    fontSize: '0.55rem', color: 'var(--text3)', letterSpacing: '0.06em',
-    marginBottom: '28px',
-  },
-  completeSummary: {
-    display: 'flex', gap: '4px', marginBottom: '28px',
-  },
-  completeStat: {
-    flex: 1, padding: '16px 8px', background: 'var(--bg3)',
-    borderRadius: '10px', border: '1px solid var(--border)',
-  },
-  completeStatVal: {
-    fontSize: '1.1rem', fontWeight: '600', lineHeight: 1, marginBottom: '6px',
-  },
-  completeStatLabel: {
-    fontSize: '0.42rem', color: 'var(--text3)', letterSpacing: '0.1em', textTransform: 'uppercase',
-  },
+  completeTitle: { fontSize: '1.3rem', fontWeight: '700', color: '#fff', marginBottom: '8px' },
+  completeSub: { fontSize: '0.55rem', color: 'var(--text3)', letterSpacing: '0.06em', marginBottom: '28px' },
+  completeSummary: { display: 'flex', gap: '4px', marginBottom: '28px' },
+  completeStat: { flex: 1, padding: '16px 8px', background: 'var(--bg3)', borderRadius: '10px', border: '1px solid var(--border)' },
+  completeStatVal: { fontSize: '1.1rem', fontWeight: '600', lineHeight: 1, marginBottom: '6px' },
+  completeStatLabel: { fontSize: '0.42rem', color: 'var(--text3)', letterSpacing: '0.1em', textTransform: 'uppercase' },
   completeDoneBtn: {
     width: '100%', padding: '15px', borderRadius: 'var(--radius-md)',
     border: '1px solid var(--teal-border)',
@@ -897,23 +888,14 @@ const s = {
     color: 'var(--text3)', fontSize: '0.72rem', cursor: 'pointer',
     fontFamily: 'var(--font-body)', boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
   },
-  dateSide: {
-    fontSize: '0.82rem', color: 'var(--text3)', opacity: 0.6,
-    minWidth: '48px', textAlign: 'right', cursor: 'pointer',
-  },
-  dateNext: {
-    fontSize: '0.82rem', color: 'var(--text3)', opacity: 0.6,
-    minWidth: '48px', textAlign: 'left', cursor: 'pointer',
-  },
+  dateSide: { fontSize: '0.82rem', color: 'var(--text3)', opacity: 0.6, minWidth: '48px', textAlign: 'right', cursor: 'pointer' },
+  dateNext: { fontSize: '0.82rem', color: 'var(--text3)', opacity: 0.6, minWidth: '48px', textAlign: 'left', cursor: 'pointer' },
   dateCenter: { textAlign: 'center', minWidth: '100px' },
   dateMain: { fontSize: '1.1rem', fontWeight: '600', color: '#fff' },
   dateSub: { fontSize: '0.48rem', color: 'var(--cyan)', letterSpacing: '0.12em', marginTop: '4px' },
 
   sessionCard: { margin: '0 24px 24px', overflow: 'hidden' },
-  sessionTop: {
-    padding: '20px 20px 16px', display: 'flex', justifyContent: 'space-between',
-    alignItems: 'flex-start', cursor: 'pointer',
-  },
+  sessionTop: { padding: '20px 20px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', cursor: 'pointer' },
   sessionInfo: { display: 'flex', gap: '16px', alignItems: 'center' },
   sessionAccent: {
     width: '3px', height: '44px', borderRadius: '2px',
@@ -925,19 +907,13 @@ const s = {
   sessionRight: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' },
   loadingDot: { color: 'var(--text3)', fontSize: '0.8rem' },
 
-  typeDropdown: {
-    padding: '8px 16px 16px', borderTop: '1px solid var(--border)',
-    display: 'flex', flexWrap: 'wrap', gap: '6px',
-  },
+  typeDropdown: { padding: '8px 16px 16px', borderTop: '1px solid var(--border)', display: 'flex', flexWrap: 'wrap', gap: '6px' },
   typeOption: {
     padding: '10px 14px', borderRadius: '10px', background: 'var(--bg3)',
     border: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left',
-    display: 'flex', flexDirection: 'column', gap: '2px', transition: 'all 0.15s',
-    flex: '0 0 auto',
+    display: 'flex', flexDirection: 'column', gap: '2px', transition: 'all 0.15s', flex: '0 0 auto',
   },
-  typeOptionActive: {
-    background: 'var(--cyan-dim)', borderColor: 'var(--cyan-border)',
-  },
+  typeOptionActive: { background: 'var(--cyan-dim)', borderColor: 'var(--cyan-border)' },
   typeLabel: { fontSize: '0.82rem', fontWeight: '600', color: 'var(--text)' },
 
   progressRow: { padding: '0 20px 16px', display: 'flex', alignItems: 'center', gap: '12px' },
@@ -953,6 +929,31 @@ const s = {
   statCell: { flex: 1, padding: '14px 0', textAlign: 'center', borderRight: '1px solid var(--border)' },
   statValue: { fontSize: '0.88rem', fontWeight: '500', letterSpacing: '0.02em', lineHeight: 1 },
   statLabel: { fontSize: '0.42rem', color: 'var(--text3)', letterSpacing: '0.1em', marginTop: '5px', textTransform: 'uppercase' },
+
+  // ── LIFT MODE BUTTON ──
+  liftModeSection: { margin: '0 24px 20px' },
+  liftModeBtn: {
+    width: '100%', padding: '16px 20px',
+    borderRadius: 'var(--radius-md)',
+    border: '1px solid rgba(34,211,238,0.25)',
+    background: 'linear-gradient(135deg, rgba(34,211,238,0.08), rgba(34,211,238,0.03))',
+    cursor: 'pointer', display: 'flex', alignItems: 'center',
+    justifyContent: 'space-between',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1), 0 0 20px rgba(34,211,238,0.03)',
+    transition: 'border-color 0.15s, background 0.15s',
+  },
+  liftModeBtnInner: { display: 'flex', alignItems: 'center', gap: '14px' },
+  liftModeIcon: {
+    width: '36px', height: '36px', borderRadius: '10px',
+    background: 'rgba(34,211,238,0.1)', border: '1px solid rgba(34,211,238,0.2)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    color: 'var(--cyan)', flexShrink: 0,
+  },
+  liftModeBtnLabel: { fontSize: '0.9rem', fontWeight: '600', color: 'var(--cyan)', textAlign: 'left' },
+  liftModeBtnSub: {
+    fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.06em',
+    marginTop: '3px', textAlign: 'left',
+  },
 
   restCard: { margin: '0 24px', padding: '48px 24px', textAlign: 'center' },
   restTitle: { fontSize: '1.1rem', fontWeight: '600', color: 'var(--text2)', marginBottom: '8px' },
@@ -975,15 +976,8 @@ const s = {
   exName: { fontSize: '0.9rem', fontWeight: '500', color: 'var(--text)' },
   exDetail: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.04em', marginTop: '4px' },
   exRight: { display: 'flex', alignItems: 'center', gap: '10px' },
-  exBadge: {
-    fontSize: '0.62rem', fontWeight: '500', color: 'var(--text2)',
-    background: 'var(--bg3)', border: '1px solid var(--border2)',
-    padding: '5px 12px', borderRadius: '7px',
-  },
-  exBadgeEmpty: {
-    fontSize: '0.62rem', color: 'var(--text3)', background: 'transparent',
-    border: '1px solid var(--border)', padding: '5px 12px', borderRadius: '7px',
-  },
+  exBadge: { fontSize: '0.62rem', fontWeight: '500', color: 'var(--text2)', background: 'var(--bg3)', border: '1px solid var(--border2)', padding: '5px 12px', borderRadius: '7px' },
+  exBadgeEmpty: { fontSize: '0.62rem', color: 'var(--text3)', background: 'transparent', border: '1px solid var(--border)', padding: '5px 12px', borderRadius: '7px' },
   exDot: { width: '8px', height: '8px', borderRadius: '50%', border: '1.5px solid var(--border3)' },
   exDotDone: { background: 'var(--teal)', borderColor: 'var(--teal)', boxShadow: '0 0 6px rgba(45,212,191,0.25)' },
 
@@ -994,10 +988,7 @@ const s = {
     boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
   },
 
-  // Action row (edit + delete)
-  actionRow: {
-    display: 'flex', gap: '8px', marginBottom: '12px',
-  },
+  actionRow: { display: 'flex', gap: '8px', marginBottom: '12px' },
   editBtn: {
     flex: 1, padding: '9px 12px', borderRadius: '8px',
     background: 'var(--cyan-dim)', border: '1px solid var(--cyan-border)',
@@ -1017,107 +1008,34 @@ const s = {
   infoValue: { fontSize: '0.8rem', color: 'var(--text2)', lineHeight: 1.4 },
   cuesSection: { display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' },
   cueItem: { fontSize: '0.78rem', color: 'var(--text2)', lineHeight: 1.4, paddingLeft: '8px', borderLeft: '2px solid var(--border2)' },
-  tipBox: {
-    fontSize: '0.78rem', color: 'var(--cyan)', lineHeight: 1.5,
-    background: 'var(--cyan-dim)', border: '1px solid var(--cyan-border)',
-    borderRadius: '8px', padding: '10px 12px', marginTop: '4px',
-  },
+  tipBox: { fontSize: '0.78rem', color: 'var(--cyan)', lineHeight: 1.5, background: 'var(--cyan-dim)', border: '1px solid var(--cyan-border)', borderRadius: '8px', padding: '10px 12px', marginTop: '4px' },
   divider: { height: '1px', background: 'var(--border)', margin: '12px 0' },
 
-  setHeader: {
-    display: 'grid', gridTemplateColumns: '32px 1fr 1fr 28px',
-    gap: '8px', fontSize: '0.42rem', color: 'var(--text3)',
-    letterSpacing: '0.1em', padding: '0 2px', marginBottom: '8px',
-  },
-  setRow: {
-    display: 'grid', gridTemplateColumns: '32px 1fr 1fr 28px',
-    gap: '8px', alignItems: 'center', marginBottom: '6px',
-  },
+  setHeader: { display: 'grid', gridTemplateColumns: '32px 1fr 1fr 28px', gap: '8px', fontSize: '0.42rem', color: 'var(--text3)', letterSpacing: '0.1em', padding: '0 2px', marginBottom: '8px' },
+  setRow: { display: 'grid', gridTemplateColumns: '32px 1fr 1fr 28px', gap: '8px', alignItems: 'center', marginBottom: '6px' },
   setNum: { fontSize: '0.65rem', color: 'var(--text3)', textAlign: 'center' },
-  setInput: {
-    background: 'var(--bg3)', border: '1px solid var(--border2)',
-    borderRadius: '8px', padding: '10px 12px', color: 'var(--text)',
-    fontFamily: 'var(--font-mono)', fontSize: '0.85rem', textAlign: 'center',
-    outline: 'none', width: '100%',
-  },
-  removeSetBtn: {
-    width: '28px', height: '36px', borderRadius: '7px',
-    background: 'transparent', border: '1px solid var(--border)',
-    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    padding: 0,
-  },
-  addSetBtn: {
-    width: '100%', padding: '9px', marginTop: '4px', marginBottom: '4px',
-    borderRadius: '8px', border: '1px dashed var(--border2)',
-    background: 'transparent', cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  },
-  logBtn: {
-    width: '100%', padding: '13px', marginTop: '8px',
-    borderRadius: 'var(--radius-md)', border: '1px solid var(--teal-border)',
-    background: 'var(--teal-dim)', color: 'var(--teal)',
-    fontFamily: 'var(--font-body)', fontSize: '0.82rem', fontWeight: '600', cursor: 'pointer',
-  },
+  setInput: { background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: '8px', padding: '10px 12px', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: '0.85rem', textAlign: 'center', outline: 'none', width: '100%' },
+  removeSetBtn: { width: '28px', height: '36px', borderRadius: '7px', background: 'transparent', border: '1px solid var(--border)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 },
+  addSetBtn: { width: '100%', padding: '9px', marginTop: '4px', marginBottom: '4px', borderRadius: '8px', border: '1px dashed var(--border2)', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  logBtn: { width: '100%', padding: '13px', marginTop: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--teal-border)', background: 'var(--teal-dim)', color: 'var(--teal)', fontFamily: 'var(--font-body)', fontSize: '0.82rem', fontWeight: '600', cursor: 'pointer' },
 
-  addCard: {
-    border: '1.5px dashed var(--border2)', borderRadius: 'var(--radius-md)',
-    padding: '14px 18px', display: 'flex', alignItems: 'center',
-    justifyContent: 'center', gap: '10px', cursor: 'pointer', marginBottom: '8px',
-  },
+  addCard: { border: '1.5px dashed var(--border2)', borderRadius: 'var(--radius-md)', padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', cursor: 'pointer', marginBottom: '8px' },
 
-  // Modal
-  modalOverlay: {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-    backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
-    zIndex: 400, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-  },
-  modal: {
-    width: '100%', maxWidth: '480px', background: 'var(--bg2)',
-    border: '1px solid var(--border2)', borderRadius: '20px 20px 0 0',
-    maxHeight: '80vh', overflowY: 'auto',
-  },
-  modalHeader: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '20px 20px 12px',
-  },
+  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', zIndex: 400, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' },
+  modal: { width: '100%', maxWidth: '480px', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: '20px 20px 0 0', maxHeight: '80vh', overflowY: 'auto' },
+  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 20px 12px' },
   modalTitle: { fontSize: '1rem', fontWeight: '700', color: '#fff' },
-  modalClose: {
-    width: '28px', height: '28px', borderRadius: '7px', background: 'transparent',
-    border: 'none', position: 'relative', cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  },
+  modalClose: { width: '28px', height: '28px', borderRadius: '7px', background: 'transparent', border: 'none', position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
 
-  // Search
   searchWrapper: { padding: '0 20px 12px' },
-  searchBar: {
-    display: 'flex', alignItems: 'center', gap: '10px',
-    background: 'var(--bg3)', border: '1px solid var(--border2)',
-    borderRadius: '10px', padding: '10px 14px',
-  },
+  searchBar: { display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: '10px', padding: '10px 14px' },
   searchIcon: { fontSize: '1rem', color: 'var(--text3)', flexShrink: 0 },
-  searchInput: {
-    flex: 1, background: 'transparent', border: 'none', outline: 'none',
-    color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
-    letterSpacing: '0.02em',
-  },
-  searchClear: {
-    background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 4px',
-    display: 'flex', alignItems: 'center',
-  },
-  customAddBtn: {
-    width: '100%', marginTop: '8px', padding: '12px 14px',
-    background: 'var(--cyan-dim)', border: '1px solid var(--cyan-border)',
-    borderRadius: '10px', cursor: 'pointer', textAlign: 'left',
-    display: 'flex', flexDirection: 'column', gap: '3px',
-  },
+  searchInput: { flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', letterSpacing: '0.02em' },
+  searchClear: { background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 4px', display: 'flex', alignItems: 'center' },
+  customAddBtn: { width: '100%', marginTop: '8px', padding: '12px 14px', background: 'var(--cyan-dim)', border: '1px solid var(--cyan-border)', borderRadius: '10px', cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '3px' },
 
   suggestionList: { padding: '0 20px 32px', display: 'flex', flexDirection: 'column', gap: '8px' },
-  suggestionCard: {
-    padding: '14px 16px', background: 'var(--bg3)', border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex',
-    justifyContent: 'space-between', alignItems: 'center', gap: '12px',
-    transition: 'border-color 0.15s',
-  },
+  suggestionCard: { padding: '14px 16px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', transition: 'border-color 0.15s' },
   suggName: { fontSize: '0.88rem', fontWeight: '500', color: 'var(--text)' },
   suggMeta: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.04em', marginTop: '4px' },
   suggNote: { fontSize: '0.72rem', color: 'var(--text2)', marginTop: '6px', lineHeight: 1.4 },

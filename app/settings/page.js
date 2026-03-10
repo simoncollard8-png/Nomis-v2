@@ -14,6 +14,8 @@ const DEFAULT_EQUIPMENT = [
   { name: 'Bodyweight', active: true },
 ]
 
+const REST_TIMER_OPTIONS = [30, 45, 60, 90, 120, 180]
+
 export default function Settings() {
   const [tab, setTab] = useState('schedule')
   const [schedule, setSchedule] = useState([])
@@ -32,12 +34,54 @@ export default function Settings() {
     proteinTarget: '180',
   })
 
+  // Training preferences (localStorage)
+  const [voiceInput, setVoiceInput] = useState(false)
+  const [audioCoaching, setAudioCoaching] = useState(false)
+  const [restDuration, setRestDuration] = useState(90)
+
   useEffect(() => { loadSettings() }, [])
+
+  // Load training prefs from localStorage
+  useEffect(() => {
+    try {
+      const prefs = JSON.parse(localStorage.getItem('nomis_training_prefs') || '{}')
+      if (prefs.voiceInput !== undefined) setVoiceInput(prefs.voiceInput)
+      if (prefs.audioCoaching !== undefined) setAudioCoaching(prefs.audioCoaching)
+      if (prefs.restDuration !== undefined) setRestDuration(prefs.restDuration)
+    } catch {}
+  }, [])
+
+  function saveTrainingPrefs(updates) {
+    try {
+      const current = JSON.parse(localStorage.getItem('nomis_training_prefs') || '{}')
+      const merged = { ...current, ...updates }
+      localStorage.setItem('nomis_training_prefs', JSON.stringify(merged))
+      showToast('Preferences saved')
+    } catch {
+      showToast('Failed to save')
+    }
+  }
+
+  function handleVoiceToggle() {
+    const next = !voiceInput
+    setVoiceInput(next)
+    saveTrainingPrefs({ voiceInput: next })
+  }
+
+  function handleAudioToggle() {
+    const next = !audioCoaching
+    setAudioCoaching(next)
+    saveTrainingPrefs({ audioCoaching: next })
+  }
+
+  function handleRestDuration(val) {
+    setRestDuration(val)
+    saveTrainingPrefs({ restDuration: val })
+  }
 
   async function loadSettings() {
     setLoading(true)
     try {
-      // Load schedule
       const scheduleRows = await dbRead('user_schedule', {}, { order: 'id', limit: 7 })
       if (scheduleRows.length) {
         const mapped = DAYS.map(day => {
@@ -46,7 +90,6 @@ export default function Settings() {
         })
         setSchedule(mapped)
       } else {
-        // Default PPL schedule
         setSchedule([
           { day: 'Monday', muscle_group: 'Push', id: null },
           { day: 'Tuesday', muscle_group: 'Pull', id: null },
@@ -58,14 +101,12 @@ export default function Settings() {
         ])
       }
 
-      // Load equipment from DB if stored
       const equipRows = await dbRead('user_equipment', {}, { limit: 20 })
       if (equipRows.length) {
         setEquipment(equipRows.map(e => ({ name: e.name, active: e.active !== false, id: e.id })))
       }
     } catch (err) {
       console.error('Settings load error:', err)
-      // Use defaults
       setSchedule(DAYS.map((day, i) => ({
         day,
         muscle_group: ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Legs', 'Rest'][i],
@@ -97,8 +138,6 @@ export default function Settings() {
   async function saveEquipment() {
     setSaving(true)
     try {
-      // For simplicity, delete and re-insert
-      // In production you'd do upserts
       for (const item of equipment) {
         if (item.id) {
           await dbWrite('user_equipment', 'update', { name: item.name, active: item.active }, { id: item.id })
@@ -141,6 +180,7 @@ export default function Settings() {
   const tabs = [
     { key: 'schedule', label: 'Schedule' },
     { key: 'equipment', label: 'Equipment' },
+    { key: 'training', label: 'Training' },
     { key: 'profile', label: 'Profile' },
     { key: 'system', label: 'System' },
   ]
@@ -157,7 +197,6 @@ export default function Settings() {
     <Shell title="Settings">
       <div style={s.page}>
 
-        {/* Save toast */}
         {saveToast && (
           <div style={s.toast} className="animate-fadeIn">
             <span className="mono">{saveToast}</span>
@@ -248,7 +287,6 @@ export default function Settings() {
               ))}
             </div>
 
-            {/* Add equipment */}
             <div style={s.addRow}>
               <input
                 style={s.addInput}
@@ -267,6 +305,87 @@ export default function Settings() {
             >
               {saving ? 'Saving...' : 'Save equipment'}
             </button>
+          </div>
+        )}
+
+        {/* ── TRAINING ── */}
+        {tab === 'training' && (
+          <div style={s.section}>
+            <div className="section-label" style={s.sLabel}>Lift Mode</div>
+            <div className="mono" style={s.equipHint}>
+              Configure your in-session experience
+            </div>
+
+            <div className="card" style={{ overflow: 'hidden', marginBottom: '24px' }}>
+
+              {/* Voice Input */}
+              <div style={s.prefRow}>
+                <div style={s.prefInfo}>
+                  <div style={s.prefLabel}>Voice Input</div>
+                  <div style={s.prefDesc} className="mono">
+                    Speak sets and weight during Lift Mode
+                  </div>
+                </div>
+                <div
+                  style={{ ...s.toggle, ...(voiceInput ? s.toggleOn : {}) }}
+                  onClick={handleVoiceToggle}
+                >
+                  <div style={{ ...s.toggleKnob, ...(voiceInput ? s.toggleKnobOn : {}) }} />
+                </div>
+              </div>
+
+              <div style={s.prefDivider} />
+
+              {/* Audio Coaching */}
+              <div style={s.prefRow}>
+                <div style={s.prefInfo}>
+                  <div style={s.prefLabel}>Audio Coaching</div>
+                  <div style={s.prefDesc} className="mono">
+                    NOMIS speaks cues between sets
+                  </div>
+                </div>
+                <div
+                  style={{ ...s.toggle, ...(audioCoaching ? s.toggleOn : {}) }}
+                  onClick={handleAudioToggle}
+                >
+                  <div style={{ ...s.toggleKnob, ...(audioCoaching ? s.toggleKnobOn : {}) }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Rest Timer */}
+            <div className="section-label" style={s.sLabel}>Rest Timer</div>
+            <div className="mono" style={s.equipHint}>
+              Default rest between sets
+            </div>
+            <div className="card" style={{ padding: '18px', overflow: 'hidden' }}>
+              <div style={s.restGrid}>
+                {REST_TIMER_OPTIONS.map(sec => (
+                  <button
+                    key={sec}
+                    style={{
+                      ...s.restOption,
+                      ...(restDuration === sec ? s.restOptionActive : {}),
+                    }}
+                    onClick={() => handleRestDuration(sec)}
+                  >
+                    <span style={{
+                      ...s.restOptionVal,
+                      ...(restDuration === sec ? { color: 'var(--cyan)' } : {}),
+                    }} className="mono">
+                      {sec >= 60 ? `${sec / 60}m` : `${sec}s`}
+                    </span>
+                    <span style={s.restOptionSec} className="mono">
+                      {sec}s
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mono" style={{ ...s.equipHint, marginTop: '16px', textAlign: 'center' }}>
+              Preferences are saved to this device automatically
+            </div>
           </div>
         )}
 
@@ -387,7 +506,6 @@ const s = {
   section: { marginBottom: '24px', padding: '0 24px' },
   sLabel: { marginBottom: '10px' },
 
-  // Toast
   toast: {
     position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)',
     zIndex: 300, background: 'rgba(45,212,191,0.1)', border: '1px solid var(--teal-border)',
@@ -396,7 +514,6 @@ const s = {
     boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
   },
 
-  // Tabs
   tabBar: {
     display: 'flex', gap: '4px', padding: '16px 24px 24px',
     overflowX: 'auto', scrollbarWidth: 'none',
@@ -431,7 +548,6 @@ const s = {
     background: 'var(--bg3)', borderColor: 'var(--border2)', color: 'var(--text3)',
   },
 
-  // Save button
   saveBtn: {
     width: '100%', padding: '15px', marginTop: '16px',
     borderRadius: 'var(--radius-md)', border: '1px solid var(--teal-border)',
@@ -471,7 +587,6 @@ const s = {
     transition: 'all 0.15s',
   },
 
-  // Add equipment
   addRow: { display: 'flex', gap: '8px', marginTop: '12px' },
   addInput: {
     flex: 1, padding: '12px 14px', borderRadius: '10px',
@@ -484,6 +599,52 @@ const s = {
     border: '1px solid var(--border2)', background: 'var(--bg2)',
     color: 'var(--text3)', fontSize: '1.2rem', cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+
+  // Training prefs
+  prefRow: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '18px 20px',
+  },
+  prefDivider: { height: '1px', background: 'var(--border)', margin: '0 20px' },
+  prefInfo: { flex: 1, paddingRight: '16px' },
+  prefLabel: { fontSize: '0.9rem', fontWeight: '500', color: 'var(--text)', marginBottom: '4px' },
+  prefDesc: { fontSize: '0.5rem', color: 'var(--text3)', letterSpacing: '0.04em' },
+
+  toggle: {
+    width: '46px', height: '27px', borderRadius: '14px',
+    background: 'var(--bg3)', border: '1px solid var(--border2)',
+    position: 'relative', cursor: 'pointer', transition: 'background 0.2s, border-color 0.2s',
+    flexShrink: 0,
+  },
+  toggleOn: {
+    background: 'rgba(34,211,238,0.2)', borderColor: 'var(--cyan-border)',
+  },
+  toggleKnob: {
+    position: 'absolute', top: '4px', left: '4px',
+    width: '17px', height: '17px', borderRadius: '50%',
+    background: 'var(--text3)', transition: 'left 0.2s, background 0.2s',
+  },
+  toggleKnobOn: { left: '23px', background: 'var(--cyan)' },
+
+  // Rest timer grid
+  restGrid: {
+    display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px',
+  },
+  restOption: {
+    padding: '14px 8px', borderRadius: '10px',
+    border: '1px solid var(--border)', background: 'var(--bg3)',
+    cursor: 'pointer', display: 'flex', flexDirection: 'column',
+    alignItems: 'center', gap: '3px', transition: 'all 0.15s',
+  },
+  restOptionActive: {
+    background: 'var(--cyan-dim)', borderColor: 'var(--cyan-border)',
+  },
+  restOptionVal: {
+    fontSize: '1rem', fontWeight: '700', color: 'var(--text)', lineHeight: 1,
+  },
+  restOptionSec: {
+    fontSize: '0.42rem', color: 'var(--text3)', letterSpacing: '0.08em',
   },
 
   // Profile
