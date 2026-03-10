@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Shell from '../../components/Shell'
 import NomisChat from '../../components/NomisChat'
 import { getTodaysWorkout, startWorkout, saveSets, checkAndSavePR, dbRead, dbWrite, getExerciseInfo, suggestExercises } from '../../lib/api'
@@ -16,6 +16,37 @@ const EQUIPMENT = [
 ]
 const EQUIPMENT_CONTEXT = `Home gym equipment: adjustable dumbbells up to 55lbs, flat/incline bench, barbell (used mainly for deadlifts, RDLs, bent over rows), pull-up and dip station, bodyweight. No cables, no machines, no squat rack. Dumbbell-dominant for pressing movements.`
 
+// Common exercises for search fallback
+const COMMON_EXERCISES = [
+  { name: 'Bench Press', muscle_group: 'Chest', equipment: 'Barbell', sets: 4, reps: '8-10' },
+  { name: 'Incline Dumbbell Press', muscle_group: 'Chest', equipment: 'Dumbbells', sets: 4, reps: '8-10' },
+  { name: 'Dumbbell Flyes', muscle_group: 'Chest', equipment: 'Dumbbells', sets: 3, reps: '12-15' },
+  { name: 'Push-ups', muscle_group: 'Chest', equipment: 'Bodyweight', sets: 3, reps: '15-20' },
+  { name: 'Overhead Press', muscle_group: 'Shoulders', equipment: 'Dumbbells', sets: 4, reps: '8-10' },
+  { name: 'Lateral Raises', muscle_group: 'Shoulders', equipment: 'Dumbbells', sets: 3, reps: '12-15' },
+  { name: 'Front Raises', muscle_group: 'Shoulders', equipment: 'Dumbbells', sets: 3, reps: '12-15' },
+  { name: 'Tricep Dips', muscle_group: 'Triceps', equipment: 'Dip Station', sets: 3, reps: '10-12' },
+  { name: 'Skull Crushers', muscle_group: 'Triceps', equipment: 'Dumbbells', sets: 3, reps: '10-12' },
+  { name: 'Tricep Kickbacks', muscle_group: 'Triceps', equipment: 'Dumbbells', sets: 3, reps: '12-15' },
+  { name: 'Pull-ups', muscle_group: 'Back', equipment: 'Pull-up Bar', sets: 4, reps: '6-10' },
+  { name: 'Bent Over Row', muscle_group: 'Back', equipment: 'Barbell', sets: 4, reps: '8-10' },
+  { name: 'Dumbbell Row', muscle_group: 'Back', equipment: 'Dumbbells', sets: 4, reps: '10-12' },
+  { name: 'Deadlift', muscle_group: 'Back', equipment: 'Barbell', sets: 4, reps: '5-8' },
+  { name: 'Face Pulls', muscle_group: 'Rear Delts', equipment: 'Bodyweight', sets: 3, reps: '15-20' },
+  { name: 'Bicep Curls', muscle_group: 'Biceps', equipment: 'Dumbbells', sets: 3, reps: '10-12' },
+  { name: 'Hammer Curls', muscle_group: 'Biceps', equipment: 'Dumbbells', sets: 3, reps: '10-12' },
+  { name: 'Chin-ups', muscle_group: 'Biceps', equipment: 'Pull-up Bar', sets: 3, reps: '6-10' },
+  { name: 'Romanian Deadlift', muscle_group: 'Hamstrings', equipment: 'Barbell', sets: 4, reps: '8-10' },
+  { name: 'Bulgarian Split Squat', muscle_group: 'Quads', equipment: 'Dumbbells', sets: 3, reps: '10-12' },
+  { name: 'Goblet Squat', muscle_group: 'Quads', equipment: 'Dumbbells', sets: 4, reps: '10-12' },
+  { name: 'Hip Thrust', muscle_group: 'Glutes', equipment: 'Barbell', sets: 4, reps: '10-12' },
+  { name: 'Dumbbell Lunge', muscle_group: 'Quads', equipment: 'Dumbbells', sets: 3, reps: '10-12' },
+  { name: 'Calf Raises', muscle_group: 'Calves', equipment: 'Bodyweight', sets: 4, reps: '15-20' },
+  { name: 'Nordic Curl', muscle_group: 'Hamstrings', equipment: 'Bodyweight', sets: 3, reps: '6-8' },
+  { name: 'Plank', muscle_group: 'Core', equipment: 'Bodyweight', sets: 3, reps: '60s' },
+  { name: 'Ab Wheel Rollout', muscle_group: 'Core', equipment: 'Bodyweight', sets: 3, reps: '10-12' },
+]
+
 export default function Train() {
   const [workout, setWorkout]           = useState(null)
   const [workoutId, setWorkoutId]       = useState(null)
@@ -23,6 +54,7 @@ export default function Train() {
   const [activeIdx, setActiveIdx]       = useState(null)
   const [setData, setSetData]           = useState({})
   const [completedEx, setCompletedEx]   = useState({})
+  const [editingEx, setEditingEx]       = useState({}) // track which are in edit mode after logging
   const [loading, setLoading]           = useState(true)
   const [saving, setSaving]             = useState(false)
   const [prToast, setPrToast]           = useState(null)
@@ -36,6 +68,11 @@ export default function Train() {
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [sessionComplete, setSessionComplete] = useState(false)
   const [completeSaving, setCompleteSaving] = useState(false)
+
+  // Search state
+  const [searchQuery, setSearchQuery]   = useState('')
+  const [searchResults, setSearchResults] = useState([])
+  const searchRef = useRef(null)
 
   const [selectedDate, setSelectedDate] = useState(new Date())
 
@@ -52,6 +89,21 @@ export default function Train() {
     }, 1000)
     return () => clearInterval(id)
   }, [sessionStart, sessionComplete])
+
+  // Search filtering
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([])
+      return
+    }
+    const q = searchQuery.toLowerCase()
+    const filtered = COMMON_EXERCISES.filter(ex =>
+      ex.name.toLowerCase().includes(q) ||
+      ex.muscle_group.toLowerCase().includes(q) ||
+      ex.equipment.toLowerCase().includes(q)
+    ).slice(0, 8)
+    setSearchResults(filtered)
+  }, [searchQuery])
 
   async function loadWorkout() {
     setLoading(true)
@@ -101,6 +153,7 @@ export default function Train() {
       })
       setSetData(init)
       setCompletedEx({})
+      setEditingEx({})
       setActiveIdx(null)
       setSessionComplete(false)
     } catch (err) {
@@ -124,6 +177,8 @@ export default function Train() {
   async function handleAddExercise() {
     if (!workout?.muscle_group) return
     setShowAddExercise(true)
+    setSearchQuery('')
+    setSearchResults([])
     setSuggestLoading(true)
     try {
       const currentNames = exercises.map(e => e.name).join(', ')
@@ -138,7 +193,7 @@ export default function Train() {
     setSuggestLoading(false)
   }
 
-  function addSuggestedExercise(ex) {
+  function addExerciseToWorkout(ex) {
     const newEx = {
       id: `added-${Date.now()}`,
       exercise_id: null,
@@ -156,6 +211,30 @@ export default function Train() {
       [newEx.id]: Array.from({ length: newEx.sets || 4 }, (_, i) => ({ set: i + 1, weight: '', reps: '' }))
     }))
     setShowAddExercise(false)
+    setSearchQuery('')
+    setSuggestions([])
+  }
+
+  function addCustomExercise() {
+    if (!searchQuery.trim()) return
+    const newEx = {
+      id: `custom-${Date.now()}`,
+      exercise_id: null,
+      name: searchQuery.trim(),
+      muscle_group: workout?.muscle_group || 'Other',
+      equipment: '',
+      sets: 4,
+      reps: '8-10',
+      notes: '',
+      done: false,
+    }
+    setExercises(prev => [...prev, newEx])
+    setSetData(prev => ({
+      ...prev,
+      [newEx.id]: Array.from({ length: 4 }, (_, i) => ({ set: i + 1, weight: '', reps: '' }))
+    }))
+    setShowAddExercise(false)
+    setSearchQuery('')
     setSuggestions([])
   }
 
@@ -163,7 +242,30 @@ export default function Train() {
     setExercises(prev => prev.filter(e => e.id !== exId))
     setSetData(prev => { const n = { ...prev }; delete n[exId]; return n })
     setCompletedEx(prev => { const n = { ...prev }; delete n[exId]; return n })
+    setEditingEx(prev => { const n = { ...prev }; delete n[exId]; return n })
     if (activeIdx !== null) setActiveIdx(null)
+  }
+
+  function toggleEditMode(exId) {
+    setEditingEx(prev => ({ ...prev, [exId]: !prev[exId] }))
+    // Remove from completed when entering edit mode
+    if (!editingEx[exId]) {
+      setCompletedEx(prev => { const n = { ...prev }; delete n[exId]; return n })
+    }
+  }
+
+  function addSet(exId) {
+    setSetData(prev => {
+      const sets = prev[exId] || []
+      return { ...prev, [exId]: [...sets, { set: sets.length + 1, weight: '', reps: '' }] }
+    })
+  }
+
+  function removeSet(exId, setIdx) {
+    setSetData(prev => {
+      const sets = (prev[exId] || []).filter((_, i) => i !== setIdx).map((s, i) => ({ ...s, set: i + 1 }))
+      return { ...prev, [exId]: sets }
+    })
   }
 
   async function handleStart() {
@@ -187,45 +289,24 @@ export default function Train() {
       setTimeout(() => setPrToast(null), 4000)
     }
     setCompletedEx(prev => ({ ...prev, [ex.id]: true }))
+    setEditingEx(prev => { const n = { ...prev }; delete n[ex.id]; return n })
     setSaving(false)
     setActiveIdx(null)
   }
 
-  // ── Complete Session handler ──────────────────────────────────────────────
   async function handleCompleteSession() {
     if (completedCount === 0 || completeSaving || sessionComplete) return
     setCompleteSaving(true)
 
     try {
       let wid = workoutId
-
-      // If session wasn't started yet (user logged all exercises individually), start it
-      if (!wid) {
-        wid = await handleStart()
-      }
+      if (!wid) wid = await handleStart()
 
       if (wid) {
-        // Calculate total duration
         const durationMin = sessionStart
           ? Math.round((Date.now() - sessionStart) / 60000)
           : null
 
-        // Calculate total volume
-        let totalVolume = 0
-        let totalSets = 0
-        exercises.forEach(ex => {
-          const sets = setData[ex.id] || []
-          sets.forEach(s => {
-            const w = parseFloat(s.weight) || 0
-            const r = parseInt(s.reps) || 0
-            if (w > 0 && r > 0) {
-              totalVolume += w * r
-              totalSets++
-            }
-          })
-        })
-
-        // Update the workout record with session summary
         await dbWrite('workouts', 'update', {
           feeling: null,
           duration_min: durationMin,
@@ -257,6 +338,7 @@ export default function Train() {
     setSessionComplete(false)
     setWorkoutId(null)
     setCompletedEx({})
+    setEditingEx({})
     setSessionStart(null)
     setElapsed('00:00:00')
     loadWorkout()
@@ -307,7 +389,6 @@ export default function Train() {
                 {workout?.muscle_group} — {completedCount} exercise{completedCount !== 1 ? 's' : ''} — {elapsed}
               </div>
 
-              {/* Session summary */}
               <div style={s.completeSummary}>
                 <div style={s.completeStat}>
                   <div style={{ ...s.completeStatVal, color: 'var(--cyan)' }} className="mono">{completedCount}</div>
@@ -380,7 +461,6 @@ export default function Train() {
             </div>
           </div>
 
-          {/* Workout type dropdown */}
           {showTypeSelect && (
             <div style={s.typeDropdown} className="animate-fadeIn">
               {WORKOUT_TYPES.map(type => (
@@ -401,7 +481,6 @@ export default function Train() {
             </div>
           )}
 
-          {/* Progress + stats */}
           {exercises.length > 0 && (
             <>
               <div style={s.progressRow}>
@@ -421,7 +500,7 @@ export default function Train() {
                 </div>
                 <div style={{ ...s.statCell, borderRight: 'none' }}>
                   <div style={{ ...s.statValue, color: 'var(--teal)' }} className="mono">
-                    {exercises.reduce((a, ex) => a + (ex.sets || 4), 0)}
+                    {exercises.reduce((a, ex) => a + (setData[ex.id]?.length || ex.sets || 4), 0)}
                   </div>
                   <div style={s.statLabel} className="mono">Sets</div>
                 </div>
@@ -450,6 +529,7 @@ export default function Train() {
 
             {exercises.map((ex, i) => {
               const isDone = completedEx[ex.id]
+              const isEditing = editingEx[ex.id]
               const isActive = activeIdx === i
               const info = exerciseInfo[ex.id]
               const isInfoLoading = infoLoading[ex.id]
@@ -458,13 +538,14 @@ export default function Train() {
                 return w > max ? w : max
               }, 0)
               const topReps = setData[ex.id]?.find(s => parseFloat(s.weight) === topWeight)?.reps || ''
+              const showLogger = !isDone || isEditing
 
               return (
                 <div key={ex.id}>
                   <div
                     style={{
                       ...s.exCard,
-                      ...(isDone ? s.exCardDone : {}),
+                      ...(isDone && !isEditing ? s.exCardDone : {}),
                       ...(isActive ? s.exCardActive : {}),
                     }}
                     onClick={() => {
@@ -476,25 +557,47 @@ export default function Train() {
                     <div style={s.exLeft}>
                       <span style={s.exNum} className="mono">{String(i + 1).padStart(2, '0')}</span>
                       <div>
-                        <div style={{ ...s.exName, ...(isDone ? { color: 'var(--text2)' } : {}) }}>{ex.name}</div>
+                        <div style={{ ...s.exName, ...(isDone && !isEditing ? { color: 'var(--text2)' } : {}) }}>{ex.name}</div>
                         <div style={s.exDetail} className="mono">
-                          {ex.muscle_group} / {ex.equipment || 'Bodyweight'} / {ex.sets || 4} x {ex.reps || '8-10'}
+                          {ex.muscle_group} / {ex.equipment || 'Bodyweight'} / {setData[ex.id]?.length || ex.sets || 4} x {ex.reps || '8-10'}
                         </div>
                       </div>
                     </div>
                     <div style={s.exRight}>
-                      {isDone && topWeight ? (
+                      {isDone && !isEditing && topWeight ? (
                         <span style={s.exBadge} className="mono">{topWeight} x {topReps}</span>
                       ) : (
                         <span style={s.exBadgeEmpty} className="mono">--</span>
                       )}
-                      <div style={{ ...s.exDot, ...(isDone ? s.exDotDone : {}) }} />
+                      <div style={{ ...s.exDot, ...(isDone && !isEditing ? s.exDotDone : {}) }} />
                     </div>
                   </div>
 
                   {/* Expanded panel */}
                   {isActive && (
                     <div style={s.expandedPanel} className="animate-fadeIn">
+
+                      {/* Action row — edit + delete always visible */}
+                      <div style={s.actionRow}>
+                        {isDone && (
+                          <button
+                            style={s.editBtn}
+                            onClick={(e) => { e.stopPropagation(); toggleEditMode(ex.id) }}
+                          >
+                            <span className="mono" style={{ fontSize: '0.5rem', letterSpacing: '0.08em' }}>
+                              {isEditing ? 'CANCEL EDIT' : 'EDIT SETS'}
+                            </span>
+                          </button>
+                        )}
+                        <button
+                          style={s.deleteBtn}
+                          onClick={(e) => { e.stopPropagation(); removeExercise(ex.id) }}
+                        >
+                          <span className="mono" style={{ fontSize: '0.5rem', letterSpacing: '0.08em' }}>
+                            REMOVE
+                          </span>
+                        </button>
+                      </div>
 
                       {/* Exercise info */}
                       <div style={s.infoSection}>
@@ -533,14 +636,13 @@ export default function Train() {
                         )}
                       </div>
 
-                      {/* Divider */}
                       <div style={s.divider} />
 
-                      {/* Set logger */}
-                      {!isDone && (
+                      {/* Set logger — shown when not done, or when editing */}
+                      {showLogger && (
                         <>
                           <div style={s.setHeader} className="mono">
-                            <span>SET</span><span>WEIGHT (lbs)</span><span>REPS</span>
+                            <span>SET</span><span>WEIGHT (lbs)</span><span>REPS</span><span></span>
                           </div>
                           {(setData[ex.id] || []).map((set, si) => (
                             <div key={si} style={s.setRow}>
@@ -557,28 +659,37 @@ export default function Train() {
                                 value={set.reps}
                                 onChange={e => updateSet(ex.id, si, 'reps', e.target.value)}
                               />
+                              <button
+                                style={s.removeSetBtn}
+                                onClick={() => removeSet(ex.id, si)}
+                              >
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text3)', lineHeight: 1 }}>×</span>
+                              </button>
                             </div>
                           ))}
+
+                          {/* Add set row */}
+                          <button style={s.addSetBtn} onClick={() => addSet(ex.id)}>
+                            <span className="mono" style={{ fontSize: '0.5rem', letterSpacing: '0.08em', color: 'var(--text3)' }}>
+                              + ADD SET
+                            </span>
+                          </button>
+
                           <button
                             style={{ ...s.logBtn, opacity: saving ? 0.5 : 1 }}
                             onClick={() => handleCompleteExercise(ex)}
                             disabled={saving}
                           >
-                            {saving ? 'Saving...' : 'Log sets'}
+                            {saving ? 'Saving...' : isEditing ? 'Save changes' : 'Log sets'}
                           </button>
                         </>
                       )}
 
-                      {isDone && (
+                      {isDone && !isEditing && (
                         <div className="mono" style={{ fontSize: '0.55rem', color: 'var(--teal)', letterSpacing: '0.06em', textAlign: 'center', padding: '8px 0' }}>
                           Sets logged
                         </div>
                       )}
-
-                      {/* Remove button */}
-                      <button style={s.removeBtn} onClick={(e) => { e.stopPropagation(); removeExercise(ex.id) }}>
-                        Remove exercise
-                      </button>
                     </div>
                   )}
                 </div>
@@ -595,31 +706,98 @@ export default function Train() {
 
         {/* Add exercise modal */}
         {showAddExercise && (
-          <div style={s.modalOverlay} onClick={(e) => { if (e.target === e.currentTarget) { setShowAddExercise(false); setSuggestions([]) } }}>
+          <div style={s.modalOverlay} onClick={(e) => { if (e.target === e.currentTarget) { setShowAddExercise(false); setSuggestions([]); setSearchQuery('') } }}>
             <div style={s.modal} className="animate-fadeIn">
               <div style={s.modalHeader}>
                 <span style={s.modalTitle}>Add Exercise</span>
-                <button style={s.modalClose} onClick={() => { setShowAddExercise(false); setSuggestions([]) }}>
+                <button style={s.modalClose} onClick={() => { setShowAddExercise(false); setSuggestions([]); setSearchQuery('') }}>
                   <span style={{ position: 'absolute', width: '14px', height: '1.5px', background: 'var(--text3)', transform: 'rotate(45deg)' }} />
                   <span style={{ position: 'absolute', width: '14px', height: '1.5px', background: 'var(--text3)', transform: 'rotate(-45deg)' }} />
                 </button>
               </div>
-              <div className="mono" style={{ fontSize: '0.5rem', color: 'var(--text3)', letterSpacing: '0.06em', padding: '0 20px 16px' }}>
-                {suggestLoading ? 'NOMIS is suggesting exercises...' : `Suggestions for ${workout?.muscle_group} with your equipment`}
+
+              {/* Search bar */}
+              <div style={s.searchWrapper}>
+                <div style={s.searchBar}>
+                  <span style={s.searchIcon} className="mono">⌕</span>
+                  <input
+                    ref={searchRef}
+                    style={s.searchInput}
+                    className="mono"
+                    placeholder="Search exercises or muscle groups..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    autoFocus
+                  />
+                  {searchQuery && (
+                    <button style={s.searchClear} onClick={() => setSearchQuery('')}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text3)' }}>×</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Add custom button when typing something not in list */}
+                {searchQuery.trim() && searchResults.length === 0 && (
+                  <button style={s.customAddBtn} onClick={addCustomExercise}>
+                    <span style={{ fontSize: '0.82rem', color: 'var(--text)', fontWeight: '500' }}>
+                      Add "{searchQuery.trim()}"
+                    </span>
+                    <span className="mono" style={{ fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.06em' }}>
+                      CUSTOM EXERCISE
+                    </span>
+                  </button>
+                )}
               </div>
+
               <div style={s.suggestionList}>
-                {suggestions.map((ex, i) => (
-                  <div key={i} style={s.suggestionCard} onClick={() => addSuggestedExercise(ex)}>
-                    <div>
-                      <div style={s.suggName}>{ex.name}</div>
-                      <div style={s.suggMeta} className="mono">
-                        {ex.muscle_group} / {ex.equipment} / {ex.sets} x {ex.reps}
+                {/* Search results take priority */}
+                {searchQuery.trim() ? (
+                  searchResults.length > 0 ? (
+                    <>
+                      <div className="mono" style={{ fontSize: '0.46rem', color: 'var(--text3)', letterSpacing: '0.1em', padding: '0 0 8px', textTransform: 'uppercase' }}>
+                        Search results
                       </div>
-                      {ex.notes && <div style={s.suggNote}>{ex.notes}</div>}
+                      {searchResults.map((ex, i) => (
+                        <div key={i} style={s.suggestionCard} onClick={() => addExerciseToWorkout(ex)}>
+                          <div>
+                            <div style={s.suggName}>{ex.name}</div>
+                            <div style={s.suggMeta} className="mono">
+                              {ex.muscle_group} / {ex.equipment} / {ex.sets} x {ex.reps}
+                            </div>
+                          </div>
+                          <span className="mono" style={{ fontSize: '0.65rem', color: 'var(--cyan)', flexShrink: 0 }}>+</span>
+                        </div>
+                      ))}
+                      {/* Still show custom add at bottom of search results */}
+                      <button style={{ ...s.customAddBtn, marginTop: '8px' }} onClick={addCustomExercise}>
+                        <span style={{ fontSize: '0.82rem', color: 'var(--text)', fontWeight: '500' }}>
+                          Add "{searchQuery.trim()}" as custom
+                        </span>
+                        <span className="mono" style={{ fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.06em' }}>
+                          CUSTOM EXERCISE
+                        </span>
+                      </button>
+                    </>
+                  ) : null
+                ) : (
+                  <>
+                    <div className="mono" style={{ fontSize: '0.46rem', color: 'var(--text3)', letterSpacing: '0.1em', padding: '0 0 8px', textTransform: 'uppercase' }}>
+                      {suggestLoading ? 'NOMIS is suggesting exercises...' : `Suggested for ${workout?.muscle_group}`}
                     </div>
-                    <span className="mono" style={{ fontSize: '0.65rem', color: 'var(--cyan)', flexShrink: 0 }}>+</span>
-                  </div>
-                ))}
+                    {suggestions.map((ex, i) => (
+                      <div key={i} style={s.suggestionCard} onClick={() => addExerciseToWorkout(ex)}>
+                        <div>
+                          <div style={s.suggName}>{ex.name}</div>
+                          <div style={s.suggMeta} className="mono">
+                            {ex.muscle_group} / {ex.equipment} / {ex.sets} x {ex.reps}
+                          </div>
+                          {ex.notes && <div style={s.suggNote}>{ex.notes}</div>}
+                        </div>
+                        <span className="mono" style={{ fontSize: '0.65rem', color: 'var(--cyan)', flexShrink: 0 }}>+</span>
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -662,7 +840,6 @@ const s = {
     cursor: 'pointer', boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
   },
 
-  // Complete overlay
   completeOverlay: {
     position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
     backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
@@ -709,7 +886,6 @@ const s = {
     fontSize: '0.9rem', fontWeight: '600', cursor: 'pointer',
   },
 
-  // Date nav
   dateNav: {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     gap: '16px', padding: '20px 24px 28px',
@@ -733,7 +909,6 @@ const s = {
   dateMain: { fontSize: '1.1rem', fontWeight: '600', color: '#fff' },
   dateSub: { fontSize: '0.48rem', color: 'var(--cyan)', letterSpacing: '0.12em', marginTop: '4px' },
 
-  // Session card
   sessionCard: { margin: '0 24px 24px', overflow: 'hidden' },
   sessionTop: {
     padding: '20px 20px 16px', display: 'flex', justifyContent: 'space-between',
@@ -750,7 +925,6 @@ const s = {
   sessionRight: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' },
   loadingDot: { color: 'var(--text3)', fontSize: '0.8rem' },
 
-  // Type dropdown
   typeDropdown: {
     padding: '8px 16px 16px', borderTop: '1px solid var(--border)',
     display: 'flex', flexWrap: 'wrap', gap: '6px',
@@ -766,7 +940,6 @@ const s = {
   },
   typeLabel: { fontSize: '0.82rem', fontWeight: '600', color: 'var(--text)' },
 
-  // Progress
   progressRow: { padding: '0 20px 16px', display: 'flex', alignItems: 'center', gap: '12px' },
   progressBg: { flex: 1, height: '3px', background: 'rgba(255,255,255,0.04)', borderRadius: '2px', overflow: 'hidden' },
   progressFill: {
@@ -776,22 +949,18 @@ const s = {
   },
   progressLabel: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.06em', flexShrink: 0 },
 
-  // Stats row
   statsRow: { display: 'flex', borderTop: '1px solid var(--border)' },
   statCell: { flex: 1, padding: '14px 0', textAlign: 'center', borderRight: '1px solid var(--border)' },
   statValue: { fontSize: '0.88rem', fontWeight: '500', letterSpacing: '0.02em', lineHeight: 1 },
   statLabel: { fontSize: '0.42rem', color: 'var(--text3)', letterSpacing: '0.1em', marginTop: '5px', textTransform: 'uppercase' },
 
-  // Rest
   restCard: { margin: '0 24px', padding: '48px 24px', textAlign: 'center' },
   restTitle: { fontSize: '1.1rem', fontWeight: '600', color: 'var(--text2)', marginBottom: '8px' },
   restSub: { fontSize: '0.55rem', color: 'var(--text3)', letterSpacing: '0.04em' },
 
-  // Section
   section: { margin: '0 24px 24px' },
   exHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', padding: '0 2px' },
 
-  // Exercise cards
   exCard: {
     background: 'var(--bg2)', border: '1px solid var(--border)',
     borderRadius: 'var(--radius-md)', padding: '16px 18px', marginBottom: '8px',
@@ -818,7 +987,6 @@ const s = {
   exDot: { width: '8px', height: '8px', borderRadius: '50%', border: '1.5px solid var(--border3)' },
   exDotDone: { background: 'var(--teal)', borderColor: 'var(--teal)', boxShadow: '0 0 6px rgba(45,212,191,0.25)' },
 
-  // Expanded panel
   expandedPanel: {
     background: 'var(--bg2)', border: '1px solid var(--border3)', borderTop: 'none',
     borderRadius: '0 0 var(--radius-md) var(--radius-md)',
@@ -826,7 +994,23 @@ const s = {
     boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
   },
 
-  // Exercise info
+  // Action row (edit + delete)
+  actionRow: {
+    display: 'flex', gap: '8px', marginBottom: '12px',
+  },
+  editBtn: {
+    flex: 1, padding: '9px 12px', borderRadius: '8px',
+    background: 'var(--cyan-dim)', border: '1px solid var(--cyan-border)',
+    color: 'var(--cyan)', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  deleteBtn: {
+    padding: '9px 16px', borderRadius: '8px',
+    background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)',
+    color: 'rgba(239,68,68,0.7)', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+
   infoSection: { display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '4px' },
   infoRow: { display: 'flex', gap: '12px', alignItems: 'flex-start' },
   infoLabel: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.1em', width: '70px', flexShrink: 0, paddingTop: '2px', textTransform: 'uppercase' },
@@ -840,14 +1024,13 @@ const s = {
   },
   divider: { height: '1px', background: 'var(--border)', margin: '12px 0' },
 
-  // Set logger
   setHeader: {
-    display: 'grid', gridTemplateColumns: '32px 1fr 1fr',
+    display: 'grid', gridTemplateColumns: '32px 1fr 1fr 28px',
     gap: '8px', fontSize: '0.42rem', color: 'var(--text3)',
     letterSpacing: '0.1em', padding: '0 2px', marginBottom: '8px',
   },
   setRow: {
-    display: 'grid', gridTemplateColumns: '32px 1fr 1fr',
+    display: 'grid', gridTemplateColumns: '32px 1fr 1fr 28px',
     gap: '8px', alignItems: 'center', marginBottom: '6px',
   },
   setNum: { fontSize: '0.65rem', color: 'var(--text3)', textAlign: 'center' },
@@ -857,21 +1040,25 @@ const s = {
     fontFamily: 'var(--font-mono)', fontSize: '0.85rem', textAlign: 'center',
     outline: 'none', width: '100%',
   },
+  removeSetBtn: {
+    width: '28px', height: '36px', borderRadius: '7px',
+    background: 'transparent', border: '1px solid var(--border)',
+    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: 0,
+  },
+  addSetBtn: {
+    width: '100%', padding: '9px', marginTop: '4px', marginBottom: '4px',
+    borderRadius: '8px', border: '1px dashed var(--border2)',
+    background: 'transparent', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
   logBtn: {
     width: '100%', padding: '13px', marginTop: '8px',
     borderRadius: 'var(--radius-md)', border: '1px solid var(--teal-border)',
     background: 'var(--teal-dim)', color: 'var(--teal)',
     fontFamily: 'var(--font-body)', fontSize: '0.82rem', fontWeight: '600', cursor: 'pointer',
   },
-  removeBtn: {
-    width: '100%', padding: '10px', marginTop: '8px',
-    borderRadius: 'var(--radius-md)', border: '1px solid var(--border)',
-    background: 'transparent', color: 'var(--text3)',
-    fontFamily: 'var(--font-mono)', fontSize: '0.52rem', letterSpacing: '0.06em',
-    cursor: 'pointer',
-  },
 
-  // Add exercise card
   addCard: {
     border: '1.5px dashed var(--border2)', borderRadius: 'var(--radius-md)',
     padding: '14px 18px', display: 'flex', alignItems: 'center',
@@ -887,11 +1074,11 @@ const s = {
   modal: {
     width: '100%', maxWidth: '480px', background: 'var(--bg2)',
     border: '1px solid var(--border2)', borderRadius: '20px 20px 0 0',
-    maxHeight: '75vh', overflowY: 'auto',
+    maxHeight: '80vh', overflowY: 'auto',
   },
   modalHeader: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '20px 20px 8px',
+    padding: '20px 20px 12px',
   },
   modalTitle: { fontSize: '1rem', fontWeight: '700', color: '#fff' },
   modalClose: {
@@ -899,7 +1086,32 @@ const s = {
     border: 'none', position: 'relative', cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
-  suggestionList: { padding: '0 20px 24px', display: 'flex', flexDirection: 'column', gap: '8px' },
+
+  // Search
+  searchWrapper: { padding: '0 20px 12px' },
+  searchBar: {
+    display: 'flex', alignItems: 'center', gap: '10px',
+    background: 'var(--bg3)', border: '1px solid var(--border2)',
+    borderRadius: '10px', padding: '10px 14px',
+  },
+  searchIcon: { fontSize: '1rem', color: 'var(--text3)', flexShrink: 0 },
+  searchInput: {
+    flex: 1, background: 'transparent', border: 'none', outline: 'none',
+    color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+    letterSpacing: '0.02em',
+  },
+  searchClear: {
+    background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 4px',
+    display: 'flex', alignItems: 'center',
+  },
+  customAddBtn: {
+    width: '100%', marginTop: '8px', padding: '12px 14px',
+    background: 'var(--cyan-dim)', border: '1px solid var(--cyan-border)',
+    borderRadius: '10px', cursor: 'pointer', textAlign: 'left',
+    display: 'flex', flexDirection: 'column', gap: '3px',
+  },
+
+  suggestionList: { padding: '0 20px 32px', display: 'flex', flexDirection: 'column', gap: '8px' },
   suggestionCard: {
     padding: '14px 16px', background: 'var(--bg3)', border: '1px solid var(--border)',
     borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex',
@@ -910,7 +1122,6 @@ const s = {
   suggMeta: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.04em', marginTop: '4px' },
   suggNote: { fontSize: '0.72rem', color: 'var(--text2)', marginTop: '6px', lineHeight: 1.4 },
 
-  // Submit
   submitSection: { margin: '8px 24px 40px' },
   submitBtn: {
     width: '100%', padding: '17px', borderRadius: 'var(--radius-md)',
