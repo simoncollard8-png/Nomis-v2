@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { saveSets, checkAndSavePR, startWorkout, dbWrite } from '../../../lib/api'
+import { saveSets, checkAndSavePR, startWorkout, dbWrite } from '../../lib/api'
 
 const COACHING_CUES = [
   'Solid set. Stay tight on the next one.',
