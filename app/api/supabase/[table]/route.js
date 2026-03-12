@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { authenticate, supabase } from '@/lib/nomis-server'
+import { authenticate, getSupabase } from '@/lib/nomis-server'
 
 export async function GET(request, { params }) {
   if (!authenticate(request)) {
@@ -13,6 +13,7 @@ export async function GET(request, { params }) {
   const order = searchParams.get('order')
 
   try {
+    const supabase = getSupabase()
     let query = supabase.from(table).select('*')
     if (filters) {
       const parsed = JSON.parse(filters)

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { authenticate, supabase } from '@/lib/nomis-server'
+import { authenticate, getSupabase } from '@/lib/nomis-server'
 
 export async function POST(request) {
   if (!authenticate(request)) {
@@ -12,6 +12,7 @@ export async function POST(request) {
   }
 
   try {
+    const supabase = getSupabase()
     let result
     switch (action) {
       case 'insert':
