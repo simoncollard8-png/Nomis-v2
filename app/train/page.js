@@ -249,6 +249,20 @@ export default function Train() {
     if (activeIdx !== null) setActiveIdx(null)
   }
 
+  function moveExercise(idx, dir) {
+    const newIdx = idx + dir
+    if (newIdx < 0 || newIdx >= exercises.length) return
+    setExercises(prev => {
+      const arr = [...prev]
+      const temp = arr[idx]
+      arr[idx] = arr[newIdx]
+      arr[newIdx] = temp
+      return arr
+    })
+    if (activeIdx === idx) setActiveIdx(newIdx)
+    else if (activeIdx === newIdx) setActiveIdx(idx)
+  }
+
   function toggleEditMode(exId) {
     setEditingEx(prev => ({ ...prev, [exId]: !prev[exId] }))
     if (!editingEx[exId]) {
@@ -583,7 +597,27 @@ export default function Train() {
                     }}
                   >
                     <div style={s.exLeft}>
-                      <span style={s.exNum} className="mono">{String(i + 1).padStart(2, '0')}</span>
+                      <div style={s.reorderCol}>
+                        <button
+                          style={{ ...s.reorderBtn, opacity: i === 0 ? 0.2 : 0.6 }}
+                          onClick={(e) => { e.stopPropagation(); moveExercise(i, -1) }}
+                          disabled={i === 0}
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+                            <path d="M18 15l-6-6-6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                        <span style={s.exNum} className="mono">{String(i + 1).padStart(2, '0')}</span>
+                        <button
+                          style={{ ...s.reorderBtn, opacity: i === exercises.length - 1 ? 0.2 : 0.6 }}
+                          onClick={(e) => { e.stopPropagation(); moveExercise(i, 1) }}
+                          disabled={i === exercises.length - 1}
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                      </div>
                       <div>
                         <div style={{ ...s.exName, ...(isDone && !isEditing ? { color: 'var(--text2)' } : {}) }}>{ex.name}</div>
                         <div style={s.exDetail} className="mono">
@@ -972,7 +1006,14 @@ const s = {
   exCardDone: { borderLeft: '2px solid var(--teal)' },
   exCardActive: { borderColor: 'var(--border3)', background: 'var(--bg3)', borderBottomLeftRadius: 0, borderBottomRightRadius: 0, marginBottom: 0 },
   exLeft: { display: 'flex', alignItems: 'center', gap: '14px' },
-  exNum: { fontSize: '0.55rem', color: 'var(--text3)', width: '16px' },
+  reorderCol: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', width: '20px', flexShrink: 0 },
+  reorderBtn: {
+    width: '20px', height: '16px', padding: 0,
+    background: 'transparent', border: 'none', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    color: 'var(--text3)', transition: 'opacity 0.15s',
+  },
+  exNum: { fontSize: '0.55rem', color: 'var(--text3)', lineHeight: 1 },
   exName: { fontSize: '0.9rem', fontWeight: '500', color: 'var(--text)' },
   exDetail: { fontSize: '0.48rem', color: 'var(--text3)', letterSpacing: '0.04em', marginTop: '4px' },
   exRight: { display: 'flex', alignItems: 'center', gap: '10px' },

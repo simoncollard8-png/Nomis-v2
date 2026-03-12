@@ -409,6 +409,21 @@ export default function LiftMode() {
     speak(msg)
   }
 
+  // Navigate to any exercise without completing current
+  function jumpToExercise(idx) {
+    if (idx < 0 || idx >= exercises.length || idx === exIdx) return
+    setExIdx(idx)
+    setSetIdx(0)
+    setShowNext(false)
+    setWeight('')
+    setReps('')
+    setRestActive(false)
+    clearTimeout(restRef.current)
+
+    const targetEx = exercises[idx]
+    setCoachMsg(`${targetEx.name}. ${targetEx.sets || 4} sets.`)
+  }
+
   // ── FINISH SESSION ──────────────────────────────────────────────────────────
   async function finishSession() {
     setScreen('complete')
@@ -567,9 +582,31 @@ export default function LiftMode() {
 
       {/* ── EXERCISE HEADER ── */}
       <div style={st.exHeader}>
-        <div style={st.exName}>{ex.name}</div>
-        <div style={st.exMeta} className="mono">
-          {ex.muscle_group} · {ex.equipment || 'Bodyweight'}
+        <div style={st.exNavRow}>
+          <button
+            style={{ ...st.exNavBtn, opacity: exIdx > 0 ? 1 : 0.2 }}
+            onClick={() => jumpToExercise(exIdx - 1)}
+            disabled={exIdx === 0}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          <div style={st.exNameWrap}>
+            <div style={st.exName}>{ex.name}</div>
+            <div style={st.exMeta} className="mono">
+              {ex.muscle_group} · {ex.equipment || 'Bodyweight'}
+            </div>
+          </div>
+          <button
+            style={{ ...st.exNavBtn, opacity: exIdx < exercises.length - 1 ? 1 : 0.2 }}
+            onClick={() => jumpToExercise(exIdx + 1)}
+            disabled={exIdx >= exercises.length - 1}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
         </div>
 
         {/* Set dots */}
@@ -794,11 +831,22 @@ const st = {
     position: 'relative', zIndex: 5,
     padding: '32px 28px 16px', textAlign: 'center',
   },
+  exNavRow: {
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px',
+  },
+  exNavBtn: {
+    width: '40px', height: '40px', borderRadius: '50%',
+    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+    color: 'rgba(255,255,255,0.5)', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0, transition: 'opacity 0.15s, background 0.15s',
+  },
+  exNameWrap: { flex: 1, minWidth: 0 },
   exName: {
     fontSize: '1.9rem', fontWeight: '800',
-    letterSpacing: '-0.02em', lineHeight: 1.1, marginBottom: '8px',
+    letterSpacing: '-0.02em', lineHeight: 1.1,
   },
-  exMeta: { fontSize: '0.52rem', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.12em', marginBottom: '22px', textTransform: 'uppercase' },
+  exMeta: { fontSize: '0.52rem', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.12em', marginTop: '8px', textTransform: 'uppercase' },
   setDots: { display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '10px' },
   dot: { width: '11px', height: '11px', borderRadius: '50%', border: '1.5px solid rgba(255,255,255,0.15)', transition: 'all 0.25s' },
   dotDone: { background: '#2dd4bf', borderColor: '#2dd4bf', boxShadow: '0 0 8px rgba(45,212,191,0.5)' },
